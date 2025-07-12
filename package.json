@@ -4,8 +4,8 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "expo build",
     "eject": "expo eject"
@@ -16,7 +16,6 @@
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
-    "@remix-run/dev": "^2.16.8",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "expo": "~50.0.0",
@@ -40,7 +39,8 @@
     "react-native-screens": "~3.29.0",
     "react-native-web": "~0.19.6",
     "react-native-webview": "13.6.4",
-    "stream-browserify": "^3.0.0"
+    "stream-browserify": "^3.0.0",
+    "vm-browserify": "^1.1.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
