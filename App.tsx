@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { Audio } from 'expo-av';
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
@@ -34,6 +34,7 @@ function ListenScreen() {
   const [error, setError] = useState<string | null>(null);
   const [currentSong, setCurrentSong] = useState<string | null>(null);
   const [songHistory, setSongHistory] = useState<string[]>([]);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
   // Load saved state on component mount
@@ -48,6 +49,7 @@ function ListenScreen() {
       
       if (savedState && savedState.isPlaying) {
         // Auto-resume if it was playing before
+        setAudioEnabled(true);
         handlePlayPause();
       }
     };
@@ -161,6 +163,12 @@ function ListenScreen() {
 
   const handlePlayPause = async () => {
     setError(null);
+    
+    // Enable audio on first interaction
+    if (!audioEnabled) {
+      setAudioEnabled(true);
+    }
+    
     if (isPlaying) {
       setIsPlaying(false);
       setIsLoading(true);
@@ -188,7 +196,7 @@ function ListenScreen() {
 
         const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
-          { shouldPlay: true },
+          { shouldPlay: false }, // Don't auto-play initially
           (status) => {
             if (status.isLoaded) {
               setIsPlaying(status.isPlaying ?? false);
@@ -199,9 +207,25 @@ function ListenScreen() {
           }
         );
         soundRef.current = sound;
-        setIsPlaying(true);
-        // Save state
-        await Storage.save('audioState', { isPlaying: true });
+        
+        // Try to play after a short delay to ensure user interaction
+        setTimeout(async () => {
+          try {
+            await sound.playAsync();
+            setIsPlaying(true);
+            // Save state
+            await Storage.save('audioState', { isPlaying: true });
+          } catch (playError) {
+            console.log('Play error:', playError);
+            if (playError instanceof Error && playError.message.includes('autoplay')) {
+              setError('Please tap play again to start streaming (browser autoplay policy)');
+            } else {
+              setError('Could not start playback. Please try again.');
+            }
+            setIsPlaying(false);
+          }
+        }, 100);
+        
       } catch (e) {
         console.log('Stream loading error:', e);
         if (e instanceof Error && e.message.includes('autoplay')) {
@@ -222,55 +246,67 @@ function ListenScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ShoutingFire</Text>
-      <Text style={styles.description}>Global Burner Radio Network</Text>
-      {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
-      {error && <Text style={styles.error}>{error}</Text>}
-      <Button
-        title={isPlaying ? 'Pause' : 'Play'}
-        onPress={handlePlayPause}
-        disabled={isLoading}
+    <View style={styles.listenContainer}>
+      {/* Background Image */}
+      <Image 
+        source={require('./assets/sfire.jpg')} 
+        style={styles.backgroundImage}
+        resizeMode="cover"
       />
-      <Text style={styles.status}>
-        {isLoading
-          ? 'Buffering...'
-          : isPlaying
-          ? 'Playing live stream'
-          : 'Paused'}
-      </Text>
       
-      {/* Song History Panel */}
-      <View style={styles.songHistoryContainer}>
-        <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
-          {songHistory.length > 0 ? (
-            songHistory.map((song, index) => (
-              <View key={`${song}-${index}`} style={[
-                styles.songHistoryItem,
-                index === songHistory.length - 1 && styles.lastSongHistoryItem
-              ]}>
-                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                  <Text style={styles.songHistoryText}>
-                    {song}
-                  </Text>
-                  <a
-                    href={`https://open.spotify.com/search/${encodeURIComponent(song)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ marginLeft: 8, fontSize: 12, color: '#1DB954', textDecoration: 'none', opacity: 0.8 }}
-                    title="Search on Spotify"
-                  >
-                    Spotify
-                  </a>
+      {/* Content Overlay */}
+      <View style={styles.contentOverlay}>
+        {/* <Text style={styles.title}>ShoutingFire</Text> */}
+        <Text style={styles.description}>Global Burner Radio Network</Text>
+        {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
+        {error && <Text style={styles.error}>{error}</Text>}
+        <Button
+          title={isPlaying ? 'Pause' : audioEnabled ? 'Play' : 'Enable Audio'}
+          onPress={handlePlayPause}
+          disabled={isLoading}
+        />
+        <Text style={styles.status}>
+          {isLoading
+            ? 'Buffering...'
+            : isPlaying
+            ? 'Playing live stream'
+            : audioEnabled
+            ? 'Paused'
+            : 'Tap to enable audio'}
+        </Text>
+        
+        {/* Song History Panel */}
+        <View style={styles.songHistoryContainer}>
+          <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
+            {songHistory.length > 0 ? (
+              songHistory.map((song, index) => (
+                <View key={`${song}-${index}`} style={[
+                  styles.songHistoryItem,
+                  index === songHistory.length - 1 && styles.lastSongHistoryItem
+                ]}>
+                  <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                    <Text style={styles.songHistoryText}>
+                      {song}
+                    </Text>
+                    <a
+                      href={`https://open.spotify.com/search/${encodeURIComponent(song)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ marginLeft: 8, fontSize: 12, color: '#1DB954', textDecoration: 'none', opacity: 0.8 }}
+                      title="Search on Spotify"
+                    >
+                      Spotify
+                    </a>
+                  </View>
                 </View>
+              ))
+            ) : (
+              <View style={styles.songHistoryItem}>
+                <Text style={styles.songHistoryText}>No recent songs available</Text>
               </View>
-            ))
-          ) : (
-            <View style={styles.songHistoryItem}>
-              <Text style={styles.songHistoryText}>No recent songs available</Text>
-            </View>
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        </View>
       </View>
     </View>
   );
@@ -280,7 +316,7 @@ function ListenScreen() {
 function ChatScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Live Chat</Text>
+      {/* <Text style={styles.title}>Live Chat</Text> */}
       <Text style={styles.description}>
         Join the conversation with DJ and other listeners!
       </Text>
@@ -348,13 +384,13 @@ function ScheduleScreen() {
 function LinksScreen() {
   const socialLinks = [
     {
-      name: 'Website',
+      name: 'ShoutingFire.com',
       url: 'https://www.shoutingfire.com/',
       icon: '🌐'
     },
     {
-      name: 'Twitter',
-      url: 'https://twitter.com/Shouting_Fire',
+      name: 'X @Shouting_Fire',
+      url: 'https://x.com/Shouting_Fire',
       icon: '🐦'
     },
     {
@@ -363,14 +399,19 @@ function LinksScreen() {
       icon: '🎵'
     },
     {
-      name: 'Instagram',
+      name: 'Insta',
       url: 'https://www.instagram.com/shouting_fire/',
       icon: '📷'
     },
     {
-      name: 'Facebook',
+      name: 'Meta',
       url: 'https://www.facebook.com/shoutingfire/',
       icon: '📘'
+    },
+    {
+      name: 'Patreon',
+      url: 'https://www.patreon.com/ShoutingFire',
+      icon: '❤️'
     }
   ];
 
@@ -436,7 +477,7 @@ export default function App() {
     <View style={styles.appContainer}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>ShoutingFire Radio</Text>
+        <Text style={styles.headerTitle}>ShoutingFire</Text>
       </View>
 
       {/* Content */}
@@ -498,6 +539,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: '#000',
+    minHeight: 0,
   },
   container: {
     flex: 1,
@@ -511,6 +553,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderTopWidth: 2,
     borderTopColor: '#ffd700',
+    position: 'relative',
+    zIndex: 10,
   },
   tab: {
     flex: 1,
@@ -535,7 +579,7 @@ const styles = StyleSheet.create({
     color: '#ffd700',
   },
   description: {
-    fontSize: 16,
+    fontSize: 18,
     textAlign: 'center',
     marginBottom: 20,
     color: '#ffd700',
@@ -674,6 +718,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffd700',
     fontWeight: '500',
+  },
+  listenContainer: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    minHeight: 0,
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.3,
+    zIndex: 1,
+  },
+  contentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 2,
+    position: 'relative',
+    minHeight: 0,
   },
 });
 

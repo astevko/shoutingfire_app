@@ -16,6 +16,7 @@ A React Native/Expo audio streaming app for the ShoutingFire Icecast2 radio stat
 ## Current State
 
 The app is functional with three main tabs:
+
 1. **Listen** - Audio player with play/pause controls and current song info
 2. **Chat** - Embedded Minnit chatroom
 3. **Schedule** - Google Calendar showing upcoming shows
@@ -23,10 +24,12 @@ The app is functional with three main tabs:
 ## Known Issues (TODOs)
 
 ### High Priority
+
 1. **✅ Current Song Display Fixed** - Now fetches metadata from Icecast status page instead of stream headers
 2. **✅ Stream Loading Error Improved** - Better error handling for browser autoplay policies and network issues
 
 ### Technical Details
+
 - Stream URL: `https://shoutingfire-ice.streamguys1.com/smartmetadata-live`
 - Metadata endpoint: Same URL with HEAD request to extract ICY headers
 - Chat: Embedded Minnit chat at `https://minnit.chat/ShoutingFireChat`
@@ -34,7 +37,7 @@ The app is functional with three main tabs:
 
 ## Project Structure
 
-```
+```ini
 shoutingfire_app/
 ├── App.tsx                 # Main app component with tab navigation
 ├── package.json           # Dependencies and scripts
@@ -47,18 +50,23 @@ shoutingfire_app/
 ## Setup Instructions
 
 ### Prerequisites
+
 - Node.js (v16 or higher)
 - npm or yarn
 - Expo CLI (`npm install -g @expo/cli`)
 
 ### Installation
+
 1. Clone the repository
+
 2. Install dependencies:
-   ```bash
-   npm install
-   ```
+
+```bash
+npm install
+```
 
 ### Development
+
 ```bash
 # Start development server
 npm run web          # Web development
@@ -66,6 +74,7 @@ npm start           # General Expo development
 ```
 
 ### Dependencies
+
 - `expo` - React Native framework
 - `expo-av` - Audio playback
 - `@react-native-async-storage/async-storage` - State persistence
@@ -74,6 +83,7 @@ npm start           # General Expo development
 ## Audio Implementation Details
 
 The app uses `expo-av` for audio streaming with the following features:
+
 - Auto-resume playback on app reload
 - Persistent play state across sessions
 - Error handling for stream issues
@@ -82,6 +92,7 @@ The app uses `expo-av` for audio streaming with the following features:
 ## State Management
 
 Uses `AsyncStorage` for cross-platform state persistence:
+
 - Audio playback state (playing/paused)
 - Active tab selection
 - App preferences
@@ -89,20 +100,26 @@ Uses `AsyncStorage` for cross-platform state persistence:
 ## Deployment
 
 ### Web (Vercel)
+
 The app is configured for Vercel deployment with Expo web support.
 
 ### Mobile
+
 - Android: Use Expo Go app or build APK
 - iOS: Use Expo Go app or build IPA
 
 ## Troubleshooting
 
 ### Common Issues
+
 1. **CORS Errors** - Some metadata fetching may be blocked in web browsers
 2. **Audio Playback** - Mobile devices may require user interaction before audio can play
 3. **Stream Loading** - Network issues or server availability may affect streaming
+4. **Minnit Chat** - Customize with black background and image background and still play stream
+5. **Schedule** - is still not showing today.
 
 ### Debug Commands
+
 ```bash
 # Clear Expo cache
 expo r -c
@@ -122,4 +139,4 @@ npm start -- --reset-cache
 
 ## Contact
 
-For issues or questions about the ShoutingFire radio station, contact the station directly. 
+For issues or questions about the ShoutingFire radio station, contact the station directly.
