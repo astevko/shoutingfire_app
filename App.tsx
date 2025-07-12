@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity, Image, Linking, Platform } from 'react-native';
+import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity, Image, Linking, Platform, useWindowDimensions } from 'react-native';
 import { Audio } from 'expo-av';
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
@@ -39,6 +39,9 @@ function ListenScreen() {
   const [songHistory, setSongHistory] = useState<string[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
+
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
 
   // Load saved state on component mount
   useEffect(() => {
@@ -282,55 +285,69 @@ function ListenScreen() {
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
         <Text style={styles.description}>Global Burner Radio Network</Text>
-        {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
-        {error && <Text style={styles.error}>{error}</Text>}
-        <TouchableOpacity
-          style={styles.playButton}
-          onPress={handlePlayPause}
-          disabled={isLoading}
-        >
-          <Text style={styles.playButtonIcon}>
-            {isPlaying ? '⏸' : '▶'}
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.status}>
-          {isLoading
-            ? 'Buffering...'
-            : isPlaying
-            ? 'Playing live stream'
-            : audioEnabled
-            ? 'Paused'
-            : 'Tap to enable audio'}
-        </Text>
         
-        {/* Song History Panel */}
-        <View style={styles.songHistoryContainer}>
-          <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
-            {songHistory.length > 0 ? (
-              songHistory.map((song, index) => (
-                <View key={`${song}-${index}`} style={[
-                  styles.songHistoryItem,
-                  index === songHistory.length - 1 && styles.lastSongHistoryItem
-                ]}>
-                  <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                    <Text style={styles.songHistoryText}>
-                      {song}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => handleSpotifySearch(song)}
-                      style={styles.spotifyButton}
-                    >
-                      <Text style={styles.spotifyButtonText}>Spotify</Text>
-                    </TouchableOpacity>
+        {/* Responsive Layout Container */}
+        <View
+          style={[
+            styles.responsiveContainer,
+            isLandscape && { flexDirection: 'row', alignItems: 'flex-start', gap: 32 }
+          ]}
+        >
+          {/* Left Side - Player Controls */}
+          <View style={styles.playerSection}>
+            {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
+            {error && <Text style={styles.error}>{error}</Text>}
+            <TouchableOpacity
+              style={styles.playButton}
+              onPress={handlePlayPause}
+              disabled={isLoading}
+            >
+              <Text style={styles.playButtonIcon}>
+                {isPlaying ? '⏸' : '▶'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.status}>
+              {isLoading
+                ? 'Buffering...'
+                : isPlaying
+                ? 'Playing live stream'
+                : audioEnabled
+                ? 'Paused'
+                : 'Tap to enable audio'}
+            </Text>
+          </View>
+          
+          {/* Right Side - Song History */}
+          <View style={styles.historySection}>
+            <View style={styles.songHistoryContainer}>
+              <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
+                {songHistory.length > 0 ? (
+                  songHistory.map((song, index) => (
+                    <View key={`${song}-${index}`} style={[
+                      styles.songHistoryItem,
+                      index === songHistory.length - 1 && styles.lastSongHistoryItem
+                    ]}>
+                      <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                        <Text style={styles.songHistoryText}>
+                          {song}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => handleSpotifySearch(song)}
+                          style={styles.spotifyButton}
+                        >
+                          <Text style={styles.spotifyButtonText}>Spotify</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.songHistoryItem}>
+                    <Text style={styles.songHistoryText}>No recent songs available</Text>
                   </View>
-                </View>
-              ))
-            ) : (
-              <View style={styles.songHistoryItem}>
-                <Text style={styles.songHistoryText}>No recent songs available</Text>
-              </View>
-            )}
-          </ScrollView>
+                )}
+              </ScrollView>
+            </View>
+          </View>
         </View>
       </View>
     </View>
@@ -426,14 +443,14 @@ function ScheduleScreen() {
 function LinksScreen() {
   const socialLinks = [
     {
+      name: 'Patreon',
+      url: 'https://www.patreon.com/ShoutingFire',
+      icon: '❤️'
+    },
+    {
       name: 'ShoutingFire.com',
       url: 'https://www.shoutingfire.com/',
       icon: '🌐'
-    },
-    {
-      name: 'X @Shouting_Fire',
-      url: 'https://x.com/Shouting_Fire',
-      icon: '🐦'
     },
     {
       name: 'SoundCloud',
@@ -451,10 +468,15 @@ function LinksScreen() {
       icon: '📘'
     },
     {
-      name: 'Patreon',
-      url: 'https://www.patreon.com/ShoutingFire',
-      icon: '❤️'
-    }
+      name: 'iHeartRadio',
+      url: 'https://www.iheart.com/live/shouting-fire-6378/',
+      icon: '🎧'
+    },
+    {
+      name: 'StreamGuys',
+      url: 'https://www.streamguys.com/',
+      icon: '🎧'
+    },
   ];
 
   const handleLinkPress = async (url: string) => {
@@ -643,8 +665,8 @@ const styles = StyleSheet.create({
     color: '#ffd700',
   },
   status: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: 8, // was 16
+    fontSize: 14, // was 16
     color: '#ffd700',
   },
   error: {
@@ -777,6 +799,37 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#000',
     fontWeight: 'bold',
+  },
+  responsiveContainer: {
+    flexDirection: 'column',
+    width: '100%',
+    maxWidth: 900,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    gap: 8, // was 24, now much tighter
+    paddingVertical: 8, // add a little vertical padding
+  },
+  playerSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 250,
+    marginBottom: 8, // was 24, now tighter
+    paddingVertical: 0, // remove extra padding
+  },
+  historySection: {
+    flex: 1,
+    minWidth: 300,
+    maxWidth: 400,
+    alignSelf: 'center',
+    marginTop: 0, // remove extra margin
+  },
+  historyTitle: {
+    fontSize: 16, // was 18
+    fontWeight: 'bold',
+    color: '#ffd700',
+    marginBottom: 4, // was 8
+    textAlign: 'center',
   },
 });
 
