@@ -1,35 +1,44 @@
 {
   "expo": {
     "name": "shoutingfire_app",
-    "slug": "shoutingfire_app",
+    "slug": "shoutingfireapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "xyz.stevko.shoutingfireapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE"
-      ]
+      ],
+      "package": "xyz.stevko.shoutingfireapp"
     },
     "web": {
       "favicon": "./public/favicon-32x32.jpg",
       "bundler": "webpack"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e2033e77-6261-416b-8541-0c151e58711e"
+      }
+    },
+    "owner": "stevko"
   }
 }

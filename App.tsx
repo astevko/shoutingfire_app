@@ -1,9 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, Button, ActivityIndicator, ScrollView, TouchableOpacity, Image, Linking, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WebView } from 'react-native-webview';
 
 // Storage utility for cross-platform state persistence
 const Storage = {
@@ -11,7 +12,8 @@ const Storage = {
     try {
       await AsyncStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
-      console.log('Error saving to storage:', error);
+      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
+      console.log('Error saving to storage:', errorMessage);
     }
   },
   
@@ -20,7 +22,8 @@ const Storage = {
       const value = await AsyncStorage.getItem(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      console.log('Error loading from storage:', error);
+      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
+      console.log('Error loading from storage:', errorMessage);
       return null;
     }
   }
@@ -149,7 +152,8 @@ function ListenScreen() {
           setCurrentSong('Live Radio - Currently Playing');
         }
       } catch (e) {
-        console.log('Error fetching song info:', e);
+        const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+        console.log('Error fetching song info:', errorMessage);
         setCurrentSong('Live Radio - Currently Playing');
       }
     };
@@ -179,7 +183,8 @@ function ListenScreen() {
         // Save state
         await Storage.save('audioState', { isPlaying: false });
       } catch (e) {
-        setError('Error stopping stream');
+        const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+        setError('Error stopping stream: ' + errorMessage);
       }
       setIsLoading(false);
     } else {
@@ -189,25 +194,27 @@ function ListenScreen() {
         try {
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
-            staysActiveInBackground: false, // Changed to false to avoid screen capture detection
+            staysActiveInBackground: false,
             playsInSilentModeIOS: true,
             shouldDuckAndroid: true,
             playThroughEarpieceAndroid: false,
           });
         } catch (audioModeError) {
-          console.log('Audio mode error (continuing):', audioModeError);
+          const errorMessage = audioModeError && typeof audioModeError === 'object' && 'message' in audioModeError ? String(audioModeError.message) : String(audioModeError);
+          console.log('Audio mode error (continuing):', errorMessage);
           // Continue even if audio mode setup fails
         }
 
         const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
-          { shouldPlay: false }, // Don't auto-play initially
+          { shouldPlay: false },
           (status) => {
             if (status.isLoaded) {
               setIsPlaying(status.isPlaying ?? false);
             } else if ('error' in status && status.error) {
               // Handle playback errors
-              setError('Playback error: ' + status.error);
+              const errorMessage = status.error && typeof status.error === 'object' && 'message' in status.error ? String(status.error.message) : String(status.error);
+              setError('Playback error: ' + errorMessage);
               setIsPlaying(false);
             }
           }
@@ -222,8 +229,9 @@ function ListenScreen() {
             // Save state
             await Storage.save('audioState', { isPlaying: true });
           } catch (playError) {
-            console.log('Play error:', playError);
-            if (playError instanceof Error && playError.message.includes('autoplay')) {
+            const errorMessage = playError && typeof playError === 'object' && 'message' in playError ? String(playError.message) : String(playError);
+            console.log('Play error:', errorMessage);
+            if (errorMessage.includes('autoplay')) {
               setError('Please tap play again to start streaming (browser autoplay policy)');
             } else {
               setError('Could not start playback. Please try again.');
@@ -233,8 +241,9 @@ function ListenScreen() {
         }, 100);
         
       } catch (e) {
-        console.log('Stream loading error:', e);
-        if (e instanceof Error && e.message.includes('autoplay')) {
+        const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+        console.log('Stream loading error:', errorMessage);
+        if (errorMessage.includes('autoplay')) {
           setError('Please tap play again to start streaming (browser autoplay policy)');
         } else {
           setError('Could not load stream. Please check your connection and try again.');
@@ -251,6 +260,16 @@ function ListenScreen() {
     };
   }, []);
 
+  const handleSpotifySearch = async (song: string) => {
+    const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(song)}`;
+    try {
+      await Linking.openURL(spotifyUrl);
+    } catch (e) {
+      const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+      console.log('Error opening Spotify:', errorMessage);
+    }
+  };
+
   return (
     <View style={styles.listenContainer}>
       {/* Background Image */}
@@ -262,7 +281,6 @@ function ListenScreen() {
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
-        {/* <Text style={styles.title}>ShoutingFire</Text> */}
         <Text style={styles.description}>Global Burner Radio Network</Text>
         {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
         {error && <Text style={styles.error}>{error}</Text>}
@@ -294,15 +312,12 @@ function ListenScreen() {
                     <Text style={styles.songHistoryText}>
                       {song}
                     </Text>
-                    <a
-                      href={`https://open.spotify.com/search/${encodeURIComponent(song)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ marginLeft: 8, fontSize: 12, color: '#1DB954', textDecoration: 'none', opacity: 0.8 }}
-                      title="Search on Spotify"
+                    <TouchableOpacity
+                      onPress={() => handleSpotifySearch(song)}
+                      style={styles.spotifyButton}
                     >
-                      Spotify
-                    </a>
+                      <Text style={styles.spotifyButtonText}>Spotify</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -322,23 +337,31 @@ function ListenScreen() {
 function ChatScreen() {
   return (
     <View style={styles.container}>
-      {/* <Text style={styles.title}>Live Chat</Text> */}
       <Text style={styles.description}>
         Join the conversation with DJ and other listeners!
       </Text>
       <View style={styles.chatContainer}>
-        <iframe
-          src="https://minnit.chat/ShoutingFireChat"
-          style={{
-            width: '100%',
-            height: '500px',
-            border: 'none',
-            borderRadius: '8px',
-            backgroundColor: '#2d2d2d',
-          }}
-          title="ShoutingFire Chat"
-          allow="microphone; camera; fullscreen; display-capture"
-        />
+        {Platform.OS === 'web' ? (
+          <iframe
+            src="https://minnit.chat/ShoutingFireChat"
+            style={{
+              width: '100%',
+              height: '500px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: '#2d2d2d',
+            }}
+            title="ShoutingFire Chat"
+            allow="microphone; camera; fullscreen; display-capture"
+          />
+        ) : (
+          <WebView
+            source={{ uri: 'https://minnit.chat/ShoutingFireChat' }}
+            style={styles.webview}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+          />
+        )}
       </View>
     </View>
   );
@@ -368,19 +391,28 @@ function ScheduleScreen() {
         Today and tomorrow's ShoutingFire schedule
       </Text>
       <View style={styles.calendarContainer}>
-        <iframe
-          src={calendarUrl}
-          style={{
-            width: '100%',
-            height: '600px',
-            border: 'none',
-            borderRadius: '8px',
-            backgroundColor: '#2d2d2d',
-          }}
-          title="ShoutingFire Schedule"
-          frameBorder="0"
-          scrolling="no"
-        />
+        {Platform.OS === 'web' ? (
+          <iframe
+            src={calendarUrl}
+            style={{
+              width: '100%',
+              height: '600px',
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: '#2d2d2d',
+            }}
+            title="ShoutingFire Schedule"
+            frameBorder="0"
+            scrolling="no"
+          />
+        ) : (
+          <WebView
+            source={{ uri: calendarUrl }}
+            style={styles.webview}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+          />
+        )}
       </View>
     </View>
   );
@@ -421,6 +453,15 @@ function LinksScreen() {
     }
   ];
 
+  const handleLinkPress = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+      console.log('Error opening link:', errorMessage);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Connect With Us</Text>
@@ -432,7 +473,7 @@ function LinksScreen() {
           <TouchableOpacity
             key={index}
             style={styles.linkItem}
-            onPress={() => window.open(link.url, '_blank')}
+            onPress={() => handleLinkPress(link.url)}
           >
             <Text style={styles.linkIcon}>{link.icon}</Text>
             <Text style={styles.linkText}>{link.name}</Text>
@@ -481,6 +522,8 @@ export default function App() {
 
   return (
     <View style={styles.appContainer}>
+      <StatusBar style="light" />
+      
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>ShoutingFire</Text>
@@ -491,34 +534,41 @@ export default function App() {
         {renderTabContent()}
       </View>
 
-      {/* Custom Tab Bar */}
+      {/* Tab Navigation */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'listen' && styles.activeTab]}
           onPress={() => handleTabChange('listen')}
         >
-          <Text style={[styles.tabText, activeTab === 'listen' && styles.activeTabText]}>🎵 Listen</Text>
+          <Text style={[styles.tabText, activeTab === 'listen' && styles.activeTabText]}>
+            Listen
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
           onPress={() => handleTabChange('chat')}
         >
-          <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>💬 Chat</Text>
+          <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
+            Chat
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'schedule' && styles.activeTab]}
           onPress={() => handleTabChange('schedule')}
         >
-          <Text style={[styles.tabText, activeTab === 'schedule' && styles.activeTabText]}>📅 Schedule</Text>
+          <Text style={[styles.tabText, activeTab === 'schedule' && styles.activeTabText]}>
+            Schedule
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'links' && styles.activeTab]}
           onPress={() => handleTabChange('links')}
         >
-          <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>🔗 Links</Text>
+          <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>
+            Links
+          </Text>
         </TouchableOpacity>
       </View>
-      <StatusBar style="light" />
     </View>
   );
 }
@@ -530,10 +580,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#000',
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 15,
     paddingHorizontal: 20,
-    alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: '#ffd700',
   },
@@ -541,11 +590,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffd700',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
-    backgroundColor: '#000',
-    minHeight: 0,
   },
   container: {
     flex: 1,
@@ -600,37 +648,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
-  errorContainer: {
-    backgroundColor: '#2d2d2d',
-    borderWidth: 1,
-    borderColor: '#ffd700',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
-    alignItems: 'center',
-  },
-  errorNote: {
-    fontSize: 12,
-    color: '#ffd700',
-    marginTop: 5,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-
-  songInfo: {
-    backgroundColor: '#2d2d2d',
-    padding: 20,
-    borderRadius: 10,
-    marginTop: 20,
-    minWidth: 300,
-    borderWidth: 1,
-    borderColor: '#ffd700',
-  },
-  songText: {
-    fontSize: 18,
-    textAlign: 'center',
-    color: '#ffd700',
-  },
   songHistoryContainer: {
     backgroundColor: '#2d2d2d',
     borderRadius: 10,
@@ -658,25 +675,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffd700',
     lineHeight: 18,
+    flex: 1,
   },
-  eventItem: {
-    backgroundColor: '#2d2d2d',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    minWidth: 300,
-    borderWidth: 1,
-    borderColor: '#ffd700',
+  spotifyButton: {
+    backgroundColor: '#1DB954',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
   },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffd700',
-  },
-  eventTime: {
-    fontSize: 14,
-    color: '#ffd700',
-    marginTop: 5,
+  spotifyButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
   },
   chatContainer: {
     width: '100%',
@@ -692,13 +703,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#2d2d2d',
   },
-  scheduleContainer: {
+  webview: {
     flex: 1,
-    backgroundColor: '#000',
-  },
-  scheduleContent: {
-    alignItems: 'center',
-    padding: 20,
+    backgroundColor: '#2d2d2d',
   },
   linksContainer: {
     width: '100%',
@@ -754,4 +761,5 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
 });
+
 
