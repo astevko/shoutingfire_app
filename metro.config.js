@@ -12,4 +12,11 @@ config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 // Reduce the number of file watchers
 config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
 
+// Add webpack configuration for web
+config.resolver.alias = {
+  crypto: 'crypto-browserify',
+  stream: 'stream-browserify',
+  buffer: 'buffer',
+};
+
 module.exports = config; 

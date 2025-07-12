@@ -11,20 +11,26 @@
     "eject": "expo eject"
   },
   "dependencies": {
+    "@expo/webpack-config": "~19.0.1",
     "@react-native-async-storage/async-storage": "1.21.0",
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
+    "@remix-run/dev": "^2.16.8",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
     "expo": "~50.0.0",
     "expo-av": "~13.10.6",
     "expo-calendar": "~12.2.1",
     "expo-constants": "~15.4.6",
+    "expo-dev-client": "~3.3.12",
     "expo-device": "~5.9.4",
     "expo-haptics": "~12.8.1",
     "expo-linear-gradient": "~12.7.2",
     "expo-splash-screen": "~0.26.5",
     "expo-status-bar": "~1.11.1",
     "expo-web-browser": "~12.8.2",
+    "process": "^0.11.10",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "0.73.6",
@@ -34,8 +40,7 @@
     "react-native-screens": "~3.29.0",
     "react-native-web": "~0.19.6",
     "react-native-webview": "13.6.4",
-    "expo-dev-client": "~3.3.12",
-    "@expo/webpack-config": "~19.0.1"
+    "stream-browserify": "^3.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
