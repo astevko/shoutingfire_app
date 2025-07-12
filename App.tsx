@@ -284,11 +284,15 @@ function ListenScreen() {
         <Text style={styles.description}>Global Burner Radio Network</Text>
         {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
         {error && <Text style={styles.error}>{error}</Text>}
-        <Button
-          title={isPlaying ? 'Pause' : audioEnabled ? 'Play' : 'Enable Audio'}
+        <TouchableOpacity
+          style={styles.playButton}
           onPress={handlePlayPause}
           disabled={isLoading}
-        />
+        >
+          <Text style={styles.playButtonIcon}>
+            {isPlaying ? '⏸' : '▶'}
+          </Text>
+        </TouchableOpacity>
         <Text style={styles.status}>
           {isLoading
             ? 'Buffering...'
@@ -759,6 +763,20 @@ const styles = StyleSheet.create({
     zIndex: 2,
     position: 'relative',
     minHeight: 0,
+  },
+  playButton: {
+    backgroundColor: '#ffd700',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playButtonIcon: {
+    fontSize: 24,
+    color: '#000',
+    fontWeight: 'bold',
   },
 });
 
