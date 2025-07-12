@@ -1,4 +1,4 @@
 {
   "buildCommand": "npx expo export:web",
-  "outputDirectory": "dist"
+  "outputDirectory": "web-build"
 } 
