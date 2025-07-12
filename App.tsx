@@ -33,12 +33,19 @@ function ListenScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentSong, setCurrentSong] = useState<string | null>(null);
+  const [songHistory, setSongHistory] = useState<string[]>([]);
   const soundRef = useRef<Audio.Sound | null>(null);
 
   // Load saved state on component mount
   useEffect(() => {
     const loadSavedState = async () => {
       const savedState = await Storage.load('audioState');
+      const savedHistory = await Storage.load('songHistory');
+      
+      if (savedHistory) {
+        setSongHistory(savedHistory);
+      }
+      
       if (savedState && savedState.isPlaying) {
         // Auto-resume if it was playing before
         handlePlayPause();
@@ -52,24 +59,95 @@ function ListenScreen() {
   useEffect(() => {
     const fetchCurrentSong = async () => {
       try {
-        const response = await fetch('https://shoutingfire-ice.streamguys1.com/smartmetadata-live', {
-          method: 'HEAD',
-        });
-
+        // Fetch from Icecast status page instead of stream headers
+        const response = await fetch('https://shoutingfire-ice.streamguys1.com/status.xsl');
+        
         if (response.ok) {
-          // Try to get song metadata from headers or show stream info
-          const icyName = response.headers.get('icy-name');
-          const icyGenre = response.headers.get('icy-genre');
-          const icyDescription = response.headers.get('icy-description');
+          const html = await response.text();
           
-          if (icyName || icyGenre || icyDescription) {
-            const metadata = [icyName, icyGenre, icyDescription].filter(Boolean).join(' - ');
-            setCurrentSong(metadata);
+          // Look for the smartmetadata-live mount point and extract current song
+          const smartMetadataMatch = html.match(/Mount Point \/smartmetadata-live[\s\S]*?Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
+          
+          if (smartMetadataMatch && smartMetadataMatch[1]) {
+            const songInfo = smartMetadataMatch[1].trim();
+            if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
+              // Update current song and add to history if it's different
+              setCurrentSong(songInfo);
+              setSongHistory(prevHistory => {
+                const splitParts = (s: string) => s.split(' - ').map(p => p.trim());
+                const newParts = splitParts(songInfo);
+                const prevParts = prevHistory.length > 0 ? splitParts(prevHistory[0]) : [];
+
+                // If previous is "Artist - Title" and new is "Title - Artist - Album"
+                if (prevParts.length === 2 && newParts.length === 3) {
+                  const prevArtist = prevParts[0].toLowerCase();
+                  const newArtist = newParts[1].toLowerCase();
+                  if (prevArtist === newArtist) {
+                    // Replace head with enhanced metadata
+                    const updatedHistory = [songInfo, ...prevHistory.slice(1)];
+                    Storage.save('songHistory', updatedHistory.slice(0, 20));
+                    return updatedHistory.slice(0, 20);
+                  }
+                }
+
+                // Fallback: remove duplicates by normalized string
+                const normalizedSongInfo = songInfo.trim().toLowerCase();
+                const filteredHistory = prevHistory.filter(
+                  song => song.trim().toLowerCase() !== normalizedSongInfo
+                );
+                const newHistory = [songInfo, ...filteredHistory];
+                Storage.save('songHistory', newHistory.slice(0, 20));
+                return newHistory.slice(0, 20);
+              });
+            } else {
+              setCurrentSong('Live Radio - Currently Playing');
+            }
           } else {
-            setCurrentSong('Live Radio - Currently Playing');
+            // Fallback: try to get any current song info
+            const anySongMatch = html.match(/Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
+            if (anySongMatch && anySongMatch[1]) {
+              const songInfo = anySongMatch[1].trim();
+              if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
+                // Update current song and add to history if it's different
+                setCurrentSong(songInfo);
+                setSongHistory(prevHistory => {
+                  const splitParts = (s: string) => s.split(' - ').map(p => p.trim());
+                  const newParts = splitParts(songInfo);
+                  const prevParts = prevHistory.length > 0 ? splitParts(prevHistory[0]) : [];
+
+                  // If previous is "Artist - Title" and new is "Title - Artist - Album"
+                  if (prevParts.length === 2 && newParts.length === 3) {
+                    const prevArtist = prevParts[0].toLowerCase();
+                    const newArtist = newParts[1].toLowerCase();
+                    if (prevArtist === newArtist) {
+                      // Replace head with enhanced metadata
+                      const updatedHistory = [songInfo, ...prevHistory.slice(1)];
+                      Storage.save('songHistory', updatedHistory.slice(0, 20));
+                      return updatedHistory.slice(0, 20);
+                    }
+                  }
+
+                  // Fallback: remove duplicates by normalized string
+                  const normalizedSongInfo = songInfo.trim().toLowerCase();
+                  const filteredHistory = prevHistory.filter(
+                    song => song.trim().toLowerCase() !== normalizedSongInfo
+                  );
+                  const newHistory = [songInfo, ...filteredHistory];
+                  Storage.save('songHistory', newHistory.slice(0, 20));
+                  return newHistory.slice(0, 20);
+                });
+              } else {
+                setCurrentSong('Live Radio - Currently Playing');
+              }
+            } else {
+              setCurrentSong('Live Radio - Currently Playing');
+            }
           }
+        } else {
+          setCurrentSong('Live Radio - Currently Playing');
         }
       } catch (e) {
+        console.log('Error fetching song info:', e);
         setCurrentSong('Live Radio - Currently Playing');
       }
     };
@@ -99,13 +177,22 @@ function ListenScreen() {
     } else {
       setIsLoading(true);
       try {
+        // Initialize audio session for better compatibility
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+
         const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
           { shouldPlay: true },
           (status) => {
             if (status.isLoaded) {
               setIsPlaying(status.isPlaying ?? false);
-            } else if (status.error) {
+            } else if ('error' in status && status.error) {
               setError('Playback error: ' + status.error);
               setIsPlaying(false);
             }
@@ -116,7 +203,12 @@ function ListenScreen() {
         // Save state
         await Storage.save('audioState', { isPlaying: true });
       } catch (e) {
-        setError('Could not load stream.');
+        console.log('Stream loading error:', e);
+        if (e instanceof Error && e.message.includes('autoplay')) {
+          setError('Please tap play again to start streaming (browser autoplay policy)');
+        } else {
+          setError('Could not load stream. Please check your connection and try again.');
+        }
         setIsPlaying(false);
       }
       setIsLoading(false);
@@ -131,8 +223,8 @@ function ListenScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>ShoutingFire Radio</Text>
-      <Text style={styles.description}>Streaming via smartmetadata-live</Text>
+      <Text style={styles.title}>ShoutingFire</Text>
+      <Text style={styles.description}>Global Burner Radio Network</Text>
       {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
       {error && <Text style={styles.error}>{error}</Text>}
       <Button
@@ -147,11 +239,39 @@ function ListenScreen() {
           ? 'Playing live stream'
           : 'Paused'}
       </Text>
-      {currentSong && (
-        <View style={styles.songInfo}>
-          <Text style={styles.songText}>{currentSong}</Text>
-        </View>
-      )}
+      
+      {/* Song History Panel */}
+      <View style={styles.songHistoryContainer}>
+        <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
+          {songHistory.length > 0 ? (
+            songHistory.map((song, index) => (
+              <View key={`${song}-${index}`} style={[
+                styles.songHistoryItem,
+                index === songHistory.length - 1 && styles.lastSongHistoryItem
+              ]}>
+                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                  <Text style={styles.songHistoryText}>
+                    {song}
+                  </Text>
+                  <a
+                    href={`https://open.spotify.com/search/${encodeURIComponent(song)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ marginLeft: 8, fontSize: 12, color: '#1DB954', textDecoration: 'none', opacity: 0.8 }}
+                    title="Search on Spotify"
+                  >
+                    Spotify
+                  </a>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.songHistoryItem}>
+              <Text style={styles.songHistoryText}>No recent songs available</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -224,6 +344,58 @@ function ScheduleScreen() {
   );
 }
 
+// Links Component
+function LinksScreen() {
+  const socialLinks = [
+    {
+      name: 'Website',
+      url: 'https://www.shoutingfire.com/',
+      icon: '🌐'
+    },
+    {
+      name: 'Twitter',
+      url: 'https://twitter.com/Shouting_Fire',
+      icon: '🐦'
+    },
+    {
+      name: 'SoundCloud',
+      url: 'https://soundcloud.com/shoutingfire',
+      icon: '🎵'
+    },
+    {
+      name: 'Instagram',
+      url: 'https://www.instagram.com/shouting_fire/',
+      icon: '📷'
+    },
+    {
+      name: 'Facebook',
+      url: 'https://www.facebook.com/shoutingfire/',
+      icon: '📘'
+    }
+  ];
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Connect With Us</Text>
+      <Text style={styles.description}>
+        Follow ShoutingFire across all platforms
+      </Text>
+      <View style={styles.linksContainer}>
+        {socialLinks.map((link, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.linkItem}
+            onPress={() => window.open(link.url, '_blank')}
+          >
+            <Text style={styles.linkIcon}>{link.icon}</Text>
+            <Text style={styles.linkText}>{link.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('listen');
 
@@ -253,6 +425,8 @@ export default function App() {
         return <ChatScreen />;
       case 'schedule':
         return <ScheduleScreen />;
+      case 'links':
+        return <LinksScreen />;
       default:
         return <ListenScreen />;
     }
@@ -289,6 +463,12 @@ export default function App() {
           onPress={() => handleTabChange('schedule')}
         >
           <Text style={[styles.tabText, activeTab === 'schedule' && styles.activeTabText]}>📅 Schedule</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'links' && styles.activeTab]}
+          onPress={() => handleTabChange('links')}
+        >
+          <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>🔗 Links</Text>
         </TouchableOpacity>
       </View>
       <StatusBar style="light" />
@@ -401,6 +581,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#ffd700',
   },
+  songHistoryContainer: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 10,
+    marginTop: 20,
+    minWidth: 300,
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#ffd700',
+    padding: 0,
+    maxHeight: 300,
+  },
+  songHistoryScroll: {
+    maxHeight: 300,
+  },
+  songHistoryItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#444',
+  },
+  lastSongHistoryItem: {
+    borderBottomWidth: 0,
+  },
+  songHistoryText: {
+    fontSize: 14,
+    color: '#ffd700',
+    lineHeight: 18,
+  },
   eventItem: {
     backgroundColor: '#2d2d2d',
     padding: 15,
@@ -442,4 +650,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  linksContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  linkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2d2d2d',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#ffd700',
+  },
+  linkIcon: {
+    fontSize: 24,
+    marginRight: 15,
+  },
+  linkText: {
+    fontSize: 16,
+    color: '#ffd700',
+    fontWeight: '500',
+  },
 });
+

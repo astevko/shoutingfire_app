@@ -5,11 +5,12 @@ A React Native/Expo audio streaming app for the ShoutingFire Icecast2 radio stat
 ## Features
 
 - **Live Audio Streaming** - Streams from ShoutingFire Icecast2 station via `/live` endpoint
-- **Current Song Display** - Shows currently playing track information (when working)
+- **Current Song Display** - Shows currently playing track information with real-time updates
+- **Song History** - Scrolling panel showing recent songs with the latest at the top (no duplicates)
 - **Live Chat Integration** - Embedded Minnit chatroom for listener interaction
 - **Schedule Display** - Google Calendar integration showing today and tomorrow's shows
 - **Cross-Platform** - Works on web (Vercel), Android, and iOS
-- **Persistent State** - Remembers playback state and active tab across sessions
+- **Persistent State** - Remembers playback state, active tab, and song history across sessions
 - **Dark Theme** - Black background with yellow text for radio station aesthetic
 
 ## Current State
@@ -22,8 +23,8 @@ The app is functional with three main tabs:
 ## Known Issues (TODOs)
 
 ### High Priority
-1. **Current Song Display Not Working** - The app attempts to fetch song metadata from stream headers but isn't displaying anything
-2. **Stream Loading Error on Page Load** - Getting "could not load stream" error when the page first loads
+1. **✅ Current Song Display Fixed** - Now fetches metadata from Icecast status page instead of stream headers
+2. **✅ Stream Loading Error Improved** - Better error handling for browser autoplay policies and network issues
 
 ### Technical Details
 - Stream URL: `https://shoutingfire-ice.streamguys1.com/smartmetadata-live`
@@ -112,11 +113,12 @@ npm start -- --reset-cache
 
 ## Next Steps
 
-1. **Fix Current Song Display** - Investigate why metadata isn't showing
-2. **Fix Stream Loading** - Resolve initial load errors
-3. **Add Error Recovery** - Better handling of network issues
-4. **Mobile Optimization** - Ensure smooth experience on mobile devices
-5. **Testing** - Test on various devices and browsers
+1. **✅ Current Song Display** - Fixed by fetching from Icecast status page
+2. **✅ Stream Loading** - Improved error handling and autoplay policy support
+3. **✅ Song History** - Implemented scrolling panel with latest songs and no duplicates
+4. **Add Error Recovery** - Better handling of network issues
+5. **Mobile Optimization** - Ensure smooth experience on mobile devices
+6. **Testing** - Test on various devices and browsers
 
 ## Contact
 
