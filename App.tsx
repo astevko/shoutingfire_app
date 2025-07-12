@@ -186,13 +186,18 @@ function ListenScreen() {
       setIsLoading(true);
       try {
         // Initialize audio session for better compatibility
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          staysActiveInBackground: true,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            staysActiveInBackground: false, // Changed to false to avoid screen capture detection
+            playsInSilentModeIOS: true,
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false,
+          });
+        } catch (audioModeError) {
+          console.log('Audio mode error (continuing):', audioModeError);
+          // Continue even if audio mode setup fails
+        }
 
         const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
@@ -201,6 +206,7 @@ function ListenScreen() {
             if (status.isLoaded) {
               setIsPlaying(status.isPlaying ?? false);
             } else if ('error' in status && status.error) {
+              // Handle playback errors
               setError('Playback error: ' + status.error);
               setIsPlaying(false);
             }

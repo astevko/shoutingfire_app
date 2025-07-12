@@ -140,3 +140,166 @@ npm start -- --reset-cache
 ## Contact
 
 For issues or questions about the ShoutingFire radio station, contact the station directly.
+
+## Development Commands
+
+### Starting the Development Server
+```bash
+# Start with tunnel (recommended for tethered devices)
+npx expo start --tunnel
+
+# Start locally
+npx expo start
+
+# Start with specific platform
+npx expo start --android
+npx expo start --ios
+npx expo start --web
+
+# Start with cleared cache
+npx expo start --clear
+```
+
+### Development Builds
+```bash
+# Create a development build for testing
+npx expo run:android
+npx expo run:ios
+
+# Build for specific platform
+npx expo build:android
+npx expo build:ios
+```
+
+## Production Build Commands
+
+### EAS Build (Recommended)
+```bash
+# Install EAS CLI
+npm install -g @expo/eas-cli
+
+# Login to Expo
+eas login
+
+# Configure EAS
+eas build:configure
+
+# Build for production
+eas build --platform android
+eas build --platform ios
+eas build --platform all
+
+# Build with specific profile
+eas build --profile production --platform android
+```
+
+### Classic Build (Deprecated)
+```bash
+# Build APK/IPA files
+expo build:android
+expo build:ios
+
+# Build with specific type
+expo build:android -t apk
+expo build:android -t app-bundle
+expo build:ios -t archive
+```
+
+## Deployment Commands
+
+### EAS Submit (App Store/Play Store)
+```bash
+# Submit to stores
+eas submit --platform android
+eas submit --platform ios
+
+# Submit with specific build
+eas submit --platform android --latest
+```
+
+### Expo Publish (Classic)
+```bash
+# Publish updates
+expo publish
+
+# Publish with specific channel
+expo publish --release-channel production
+```
+
+## Package Management
+
+### Installing Dependencies
+```bash
+# Install Expo packages (recommended)
+npx expo install package-name
+
+# Install with dependency resolution
+npx expo install --fix
+
+# Regular npm install
+npm install
+
+# Install with legacy peer deps
+npm install --legacy-peer-deps
+```
+
+### Updating Dependencies
+```bash
+# Update Expo SDK
+npx expo install expo@latest
+
+# Update all Expo packages
+npx expo install --fix
+
+# Update npm packages
+npm update
+```
+
+## Configuration Files
+
+### Key Files
+- `package.json` - Dependencies and scripts
+- `app.json` / `app.config.js` - Expo configuration
+- `eas.json` - EAS Build configuration
+- `metro.config.js` - Metro bundler configuration
+
+### Common Scripts in package.json
+```json
+{
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build": "expo build",
+    "eject": "expo eject"
+  }
+}
+```
+
+## Environment and Platform Differences
+
+### Android
+- Uses `adb` for device communication
+- APK/AAB files for distribution
+- Google Play Store deployment
+
+### iOS
+- Requires macOS for builds
+- IPA files for distribution
+- App Store deployment
+
+### Web
+- Uses webpack bundler
+- Static file deployment
+- No app store required
+
+## Best Practices
+
+1. **Use EAS Build** instead of classic build
+2. **Use tunnel mode** for tethered device testing
+3. **Clear cache** when experiencing issues
+4. **Use `npx expo install`** for Expo packages
+5. **Test on real devices** before deployment
+
+The main difference is that modern Expo projects use **EAS Build** for production builds and deployments, while the classic `expo build` commands are deprecated.
