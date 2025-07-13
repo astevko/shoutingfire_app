@@ -5,17 +5,28 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "development"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "preview"
+      }
     },
     "production": {
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
       },
       "ios": {
-        "distribution": "store"
+        "distribution": "store",
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "production"
       }
     },
     "development-simulator": {
@@ -24,13 +35,15 @@
       "ios": {
         "simulator": true
       },
-      "environment": "development"
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "development"
+      }
     }
   },
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "./path/to/service-account.json",
+        "serviceAccountKeyPath": "./google-service-account.json",
         "track": "production"
       },
       "ios": {

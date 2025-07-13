@@ -216,7 +216,7 @@ function ListenScreen() {
               setIsPlaying(status.isPlaying ?? false);
             } else if ('error' in status && status.error) {
               // Handle playback errors
-              const errorMessage = status.error && typeof status.error === 'object' && 'message' in status.error ? String(status.error.message) : String(status.error);
+              const errorMessage = status.error && typeof status.error === 'object' && 'message' in status.error ? String((status.error as any).message) : String(status.error);
               setError('Playback error: ' + errorMessage);
               setIsPlaying(false);
             }

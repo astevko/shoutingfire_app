@@ -8,7 +8,16 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "expo build",
-    "eject": "expo eject"
+    "eject": "expo eject",
+    "build:android-dev": "eas build --platform android --profile development",
+    "build:android-prod": "eas build --platform android --profile production",
+    "build:ios-dev": "eas build --platform ios --profile development",
+    "build:ios-prod": "eas build --platform ios --profile production",
+    "build:all-dev": "eas build --platform all --profile development",
+    "build:all-prod": "eas build --platform all --profile production",
+    "submit:android": "eas submit --platform android --profile production",
+    "submit:ios": "eas submit --platform ios --profile production",
+    "submit:all": "eas submit --platform all --profile production"
   },
   "dependencies": {
     "@expo/webpack-config": "~19.0.1",

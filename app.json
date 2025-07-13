@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "shoutingfire_app",
+    "name": "ShoutingFire",
     "slug": "shoutingfireapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,31 +10,15 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "xyz.stevko.shoutingfireapp",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "permissions": [
-        "android.permission.INTERNET",
-        "android.permission.WAKE_LOCK",
-        "android.permission.FOREGROUND_SERVICE"
-      ],
-      "package": "xyz.stevko.shoutingfireapp"
+      "backgroundColor": "#000000"
     },
     "web": {
       "favicon": "./public/favicon-32x32.jpg",
       "bundler": "webpack"
     },
+    "plugins": [
+      "expo-av"
+    ],
     "extra": {
       "eas": {
         "projectId": "e2033e77-6261-416b-8541-0c151e58711e"
