@@ -78,6 +78,7 @@ function ListenScreen() {
           
           if (smartMetadataMatch && smartMetadataMatch[1]) {
             const songInfo = smartMetadataMatch[1].trim();
+            console.log('Fetched song info:', songInfo);
             if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
               // Update current song and add to history if it's different
               setCurrentSong(songInfo);
@@ -303,7 +304,7 @@ function ListenScreen() {
               disabled={isLoading}
             >
               <Text style={styles.playButtonIcon}>
-                {isPlaying ? '⏸' : '▶'}
+                {isPlaying ? 'PAUSE' : 'PLAY'}
               </Text>
             </TouchableOpacity>
             <Text style={styles.status}>
@@ -315,10 +316,16 @@ function ListenScreen() {
                 ? 'Paused'
                 : 'Tap to enable audio'}
             </Text>
+            {currentSong && (
+              <Text style={styles.currentSongText}>
+                Now Playing: {currentSong}
+              </Text>
+            )}
           </View>
           
           {/* Right Side - Song History */}
           <View style={styles.historySection}>
+            <Text style={styles.historyTitle}>Recent Songs</Text>
             <View style={styles.songHistoryContainer}>
               <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
                 {songHistory.length > 0 ? (
@@ -668,6 +675,13 @@ const styles = StyleSheet.create({
     marginTop: 8, // was 16
     fontSize: 14, // was 16
     color: '#ffd700',
+  },
+  currentSongText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#ffd700',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   error: {
     color: '#ff6b6b',

@@ -12,6 +12,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "xyz.stevko.shoutingfireapp",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio"],
+        "NSMicrophoneUsageDescription": "This app needs microphone access for chat functionality",
+        "NSCameraUsageDescription": "This app needs camera access for chat functionality"
+      }
+    },
     "web": {
       "favicon": "./public/favicon-32x32.jpg",
       "bundler": "webpack"

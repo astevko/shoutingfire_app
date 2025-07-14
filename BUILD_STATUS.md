@@ -11,8 +11,8 @@
 ### Project Configuration
 - ✅ Fixed TypeScript error in App.tsx
 - ✅ Updated metro.config.js to use @expo/metro-config
-- ✅ Resolved native folder conflicts (moved android to android_backup)
-- ✅ Enhanced app.json with proper native configuration
+- ✅ Configured hybrid approach: Android (native folder) + iOS (managed workflow)
+- ✅ Enhanced app.json with proper iOS configuration
 - ✅ Configured EAS build profiles for development, preview, and production
 
 ## ⚠️ iOS Build Status
