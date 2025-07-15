@@ -63,6 +63,13 @@ function ListenScreen() {
     loadSavedState();
   }, []);
 
+  // HTML entity decoder function
+  const decodeHtmlEntities = (text: string): string => {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
   // Fetch current song info
   useEffect(() => {
     const fetchCurrentSong = async () => {
@@ -77,7 +84,7 @@ function ListenScreen() {
           const smartMetadataMatch = html.match(/Mount Point \/smartmetadata-live[\s\S]*?Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
           
           if (smartMetadataMatch && smartMetadataMatch[1]) {
-            const songInfo = smartMetadataMatch[1].trim();
+            const songInfo = decodeHtmlEntities(smartMetadataMatch[1].trim());
             console.log('Fetched song info:', songInfo);
             if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
               // Update current song and add to history if it's different
@@ -115,7 +122,7 @@ function ListenScreen() {
             // Fallback: try to get any current song info
             const anySongMatch = html.match(/Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
             if (anySongMatch && anySongMatch[1]) {
-              const songInfo = anySongMatch[1].trim();
+              const songInfo = decodeHtmlEntities(anySongMatch[1].trim());
               if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
                 // Update current song and add to history if it's different
                 setCurrentSong(songInfo);
@@ -325,7 +332,6 @@ function ListenScreen() {
           
           {/* Right Side - Song History */}
           <View style={styles.historySection}>
-            <Text style={styles.historyTitle}>Recent Songs</Text>
             <View style={styles.songHistoryContainer}>
               <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
                 {songHistory.length > 0 ? (
