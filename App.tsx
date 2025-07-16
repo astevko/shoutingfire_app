@@ -323,6 +323,9 @@ const Storage = {
 // Audio Player Component (simplified for ListenScreen)
 function ListenScreen() {
   const audioContext = React.useContext(AudioContext);
+  const [onAirData, setOnAirData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   if (!audioContext) {
     return (
@@ -336,40 +339,196 @@ function ListenScreen() {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Recent Songs</Text>
-      <Text style={styles.description}>Song history from the live stream</Text>
+  // Fetch Now On Air data
+  useEffect(() => {
+    fetchNowOnAir();
+  }, []);
+
+  const fetchNowOnAir = async () => {
+    try {
+      setLoading(true);
+      setError(null);
       
-      <View style={styles.songHistoryContainer}>
-        <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
-          {songHistory.length > 0 ? (
-            songHistory.map((song: string, index: number) => (
-              <View key={`${song}-${index}`} style={[
-                styles.songHistoryItem,
-                index === songHistory.length - 1 && styles.lastSongHistoryItem
-              ]}>
-                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                  <Text style={styles.songHistoryText}>
-                    {song}
+      const response = await fetch('https://shoutingfire.com/');
+      const html = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Use regex to extract the "Now On Air" data from HTML
+      const showData = {
+        title: '',
+        dj: '',
+        time: '',
+        link: '',
+        backgroundImage: ''
+      };
+      
+      // Extract title and link
+      const titleMatch = html.match(/<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
+      if (titleMatch) {
+        showData.link = titleMatch[1];
+        showData.title = decodeHtmlEntities(titleMatch[2]);
+      }
+      
+      // Extract DJ name
+      const djMatch = html.match(/<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/);
+      if (djMatch) {
+        showData.dj = decodeHtmlEntities(djMatch[1].trim());
+      }
+      
+      // Extract time - look for the specific pattern with dripicons
+      const timeMatch = html.match(/<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/);
+      if (timeMatch) {
+        showData.time = decodeHtmlEntities(`${timeMatch[1].trim()} → ${timeMatch[2].trim()}`);
+      } else {
+        // Fallback for different time format
+        const timeMatch2 = html.match(/<p class="qt-small">\s*([^<]+)\s*<\/p>/);
+        if (timeMatch2) {
+          showData.time = decodeHtmlEntities(timeMatch2[1].trim());
+        }
+      }
+      
+      // Extract background image - look for the specific div with data-bgimage
+      const bgMatch = html.match(/data-bgimage="([^"]+)"/);
+      if (bgMatch) {
+        showData.backgroundImage = bgMatch[1];
+      } else {
+        // Fallback for style-based background
+        const bgMatch2 = html.match(/background-image:\s*url\(['"]?([^'"]+)['"]?\)/);
+        if (bgMatch2) {
+          showData.backgroundImage = bgMatch2[1];
+        }
+      }
+      
+      if (showData.title) {
+        setOnAirData(showData);
+      } else {
+        setError('No "Now On Air" data found');
+      }
+    } catch (err) {
+      const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
+      console.log('Error fetching Now On Air data:', errorMessage);
+      setError('Failed to load current show information.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShowPress = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log('Error opening show link:', error);
+    }
+  };
+
+  return (
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Now On Air Section */}
+      <View style={styles.nowOnAirSection}>
+        <Text style={styles.sectionTitle}>Now On Air</Text>
+        
+        {loading ? (
+          <View style={styles.onAirCard}>
+            <ActivityIndicator size="large" color="#ffd700" />
+            <Text style={styles.status}>Loading current show...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.onAirCard}>
+            <Text style={styles.error}>{error}</Text>
+            <TouchableOpacity style={styles.playButton} onPress={fetchNowOnAir}>
+              <Text style={styles.playButtonIcon}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : onAirData ? (
+          <TouchableOpacity
+            style={styles.onAirCard}
+            onPress={() => handleShowPress(onAirData.link)}
+          >
+            {onAirData.backgroundImage && (
+              <Image
+                source={{ uri: onAirData.backgroundImage }}
+                style={styles.onAirBackground}
+                resizeMode="cover"
+              />
+            )}
+            
+            <View style={styles.onAirOverlay}>
+              <View style={styles.onAirContent}>
+                <Text style={styles.onAirTitle} numberOfLines={2}>
+                  {onAirData.title}
+                </Text>
+                
+                {onAirData.dj && (
+                  <Text style={styles.onAirDJ}>
+                    {onAirData.dj}
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => handleSpotifySearch(song)}
-                    style={styles.spotifyButton}
-                  >
-                    <Text style={styles.spotifyButtonText}>Spotify</Text>
-                  </TouchableOpacity>
+                )}
+                
+                {onAirData.time && (
+                  <Text style={styles.onAirTime}>
+                    {onAirData.time}
+                  </Text>
+                )}
+                
+                <View style={styles.onAirFooter}>
+                  <Text style={styles.onAirLink}>Tap to view show details →</Text>
                 </View>
               </View>
-            ))
-          ) : (
-            <View style={styles.songHistoryItem}>
-              <Text style={styles.songHistoryText}>No recent songs available</Text>
             </View>
-          )}
-        </ScrollView>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.onAirCard}>
+            <Text style={styles.description}>No show information available.</Text>
+          </View>
+        )}
       </View>
-    </View>
+
+      {/* Recent Songs Section */}
+      <View style={styles.recentSongsSection}>
+        <Text style={styles.sectionTitle}>Recent Songs</Text>
+        <Text style={styles.description}>Song history from the live stream</Text>
+        
+        <View style={styles.songHistoryContainer}>
+          <ScrollView 
+            style={styles.songHistoryScroll} 
+            contentContainerStyle={styles.songHistoryContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {songHistory.length > 0 ? (
+              songHistory.map((song: string, index: number) => (
+                <View key={`${song}-${index}`} style={[
+                  styles.songHistoryItem,
+                  index === songHistory.length - 1 && styles.lastSongHistoryItem
+                ]}>
+                  <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                    <Text style={styles.songHistoryText}>
+                      {song}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleSpotifySearch(song)}
+                      style={styles.spotifyButton}
+                    >
+                      <Text style={styles.spotifyButtonText}>Spotify</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.songHistoryItem}>
+                <Text style={styles.songHistoryText}>No recent songs available</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -643,166 +802,7 @@ function RegionalsScreen() {
 }
 
 // Now On Air Component
-function NowOnAirScreen() {
-  const [onAirData, setOnAirData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchNowOnAir();
-  }, []);
-
-  const fetchNowOnAir = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch('https://shoutingfire.com/');
-      const html = await response.text();
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      // Use regex to extract the "Now On Air" data from HTML
-      const showData = {
-        title: '',
-        dj: '',
-        time: '',
-        link: '',
-        backgroundImage: ''
-      };
-      
-      // Extract title and link
-      const titleMatch = html.match(/<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
-      if (titleMatch) {
-        showData.link = titleMatch[1];
-        showData.title = decodeHtmlEntities(titleMatch[2]);
-      }
-      
-      // Extract DJ name
-      const djMatch = html.match(/<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/);
-      if (djMatch) {
-        showData.dj = decodeHtmlEntities(djMatch[1].trim());
-      }
-      
-      // Extract time - look for the specific pattern with dripicons
-      const timeMatch = html.match(/<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/);
-      if (timeMatch) {
-        showData.time = decodeHtmlEntities(`${timeMatch[1].trim()} → ${timeMatch[2].trim()}`);
-      } else {
-        // Fallback for different time format
-        const timeMatch2 = html.match(/<p class="qt-small">\s*([^<]+)\s*<\/p>/);
-        if (timeMatch2) {
-          showData.time = decodeHtmlEntities(timeMatch2[1].trim());
-        }
-      }
-      
-      // Extract background image - look for the specific div with data-bgimage
-      const bgMatch = html.match(/data-bgimage="([^"]+)"/);
-      if (bgMatch) {
-        showData.backgroundImage = bgMatch[1];
-      } else {
-        // Fallback for style-based background
-        const bgMatch2 = html.match(/background-image:\s*url\(['"]?([^'"]+)['"]?\)/);
-        if (bgMatch2) {
-          showData.backgroundImage = bgMatch2[1];
-        }
-      }
-      
-      if (showData.title) {
-        setOnAirData(showData);
-      } else {
-        setError('No "Now On Air" data found');
-      }
-    } catch (err) {
-      const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
-      console.log('Error fetching Now On Air data:', errorMessage);
-      setError('Failed to load current show information.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShowPress = async (url: string) => {
-    try {
-      await Linking.openURL(url);
-    } catch (error) {
-      console.log('Error opening show link:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#ffd700" />
-        <Text style={styles.status}>Loading current show...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.error}>{error}</Text>
-        <TouchableOpacity style={styles.playButton} onPress={fetchNowOnAir}>
-          <Text style={styles.playButtonIcon}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (!onAirData) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.description}>No show information available.</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.nowOnAirContainer}>
-      <Text style={styles.title}>Now On Air</Text>
-      
-      <TouchableOpacity
-        style={styles.onAirCard}
-        onPress={() => handleShowPress(onAirData.link)}
-      >
-        {onAirData.backgroundImage && (
-          <Image
-            source={{ uri: onAirData.backgroundImage }}
-            style={styles.onAirBackground}
-            resizeMode="cover"
-          />
-        )}
-        
-        <View style={styles.onAirOverlay}>
-          <View style={styles.onAirContent}>
-            <Text style={styles.onAirTitle} numberOfLines={2}>
-              {onAirData.title}
-            </Text>
-            
-            {onAirData.dj && (
-              <Text style={styles.onAirDJ}>
-                {onAirData.dj}
-              </Text>
-            )}
-            
-            {onAirData.time && (
-              <Text style={styles.onAirTime}>
-                {onAirData.time}
-              </Text>
-            )}
-            
-            <View style={styles.onAirFooter}>
-              <Text style={styles.onAirLink}>Tap to view show details →</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('listen');
@@ -835,8 +835,6 @@ export default function App() {
         return <ScheduleScreen />;
       case 'regionals':
         return <RegionalsScreen />;
-      case 'nowonair':
-        return <NowOnAirScreen />;
       case 'links':
         return <LinksScreen />;
       default:
@@ -886,14 +884,7 @@ export default function App() {
               Regionals
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'nowonair' && styles.activeTab]}
-            onPress={() => handleTabChange('nowonair')}
-          >
-            <Text style={[styles.tabText, activeTab === 'nowonair' && styles.activeTabText]}>
-              On Air
-            </Text>
-          </TouchableOpacity>
+          
           <TouchableOpacity
             style={[styles.tab, activeTab === 'links' && styles.activeTab]}
             onPress={() => handleTabChange('links')}
@@ -938,9 +929,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1330,6 +1318,28 @@ const styles = StyleSheet.create({
   headerSpotifyButtonText: {
     fontSize: 12,
     color: '#fff',
+  },
+  // Listen screen section styles
+  nowOnAirSection: {
+    marginBottom: 30,
+  },
+  recentSongsSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  scrollContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  songHistoryContent: {
+    padding: 0,
   },
 });
 
