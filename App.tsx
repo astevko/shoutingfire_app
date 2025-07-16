@@ -6,31 +6,31 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 
-// Storage utility for cross-platform state persistence
-const Storage = {
-  async save(key: string, value: any) {
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
-      console.log('Error saving to storage:', errorMessage);
-    }
-  },
-  
-  async load(key: string) {
-    try {
-      const value = await AsyncStorage.getItem(key);
-      return value ? JSON.parse(value) : null;
-    } catch (error) {
-      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
-      console.log('Error loading from storage:', errorMessage);
-      return null;
-    }
+// @ts-ignore
+import * as rssParser from 'react-native-rss-parser';
+
+// HTML entity decoder function
+const decodeHtmlEntities = (text: string): string => {
+  if (typeof document !== 'undefined') {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
   }
+  // Fallback for React Native
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&nbsp;/g, ' ');
 };
 
-// Audio Player Component
-function ListenScreen() {
+// Audio Player Context
+const AudioContext = React.createContext<any>(null);
+
+// Audio Player Provider Component
+function AudioProvider({ children }: { children: React.ReactNode }) {
   const STREAM_URL = 'https://shoutingfire-ice.streamguys1.com/smartmetadata-live';
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,9 +39,6 @@ function ListenScreen() {
   const [songHistory, setSongHistory] = useState<string[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
-
-  const { width, height } = useWindowDimensions();
-  const isLandscape = width > height;
 
   // Load saved state on component mount
   useEffect(() => {
@@ -62,13 +59,6 @@ function ListenScreen() {
     
     loadSavedState();
   }, []);
-
-  // HTML entity decoder function
-  const decodeHtmlEntities = (text: string): string => {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = text;
-    return textarea.value;
-  };
 
   // Fetch current song info
   useEffect(() => {
@@ -211,157 +201,173 @@ function ListenScreen() {
             playThroughEarpieceAndroid: false,
           });
         } catch (audioModeError) {
-          const errorMessage = audioModeError && typeof audioModeError === 'object' && 'message' in audioModeError ? String(audioModeError.message) : String(audioModeError);
-          console.log('Audio mode error (continuing):', errorMessage);
-          // Continue even if audio mode setup fails
+          console.log('Audio mode error (non-critical):', audioModeError);
         }
 
         const { sound } = await Audio.Sound.createAsync(
           { uri: STREAM_URL },
-          { shouldPlay: false },
-          (status) => {
-            if (status.isLoaded) {
-              setIsPlaying(status.isPlaying ?? false);
-            } else if ('error' in status && status.error) {
-              // Handle playback errors
-              const errorMessage = status.error && typeof status.error === 'object' && 'message' in status.error ? String((status.error as any).message) : String(status.error);
-              setError('Playback error: ' + errorMessage);
-              setIsPlaying(false);
-            }
-          }
+          { shouldPlay: true, isLooping: false }
         );
+
         soundRef.current = sound;
-        
-        // Try to play after a short delay to ensure user interaction
-        setTimeout(async () => {
-          try {
-            await sound.playAsync();
-            setIsPlaying(true);
-            // Save state
-            await Storage.save('audioState', { isPlaying: true });
-          } catch (playError) {
-            const errorMessage = playError && typeof playError === 'object' && 'message' in playError ? String(playError.message) : String(playError);
-            console.log('Play error:', errorMessage);
-            if (errorMessage.includes('autoplay')) {
-              setError('Please tap play again to start streaming (browser autoplay policy)');
-            } else {
-              setError('Could not start playback. Please try again.');
-            }
-            setIsPlaying(false);
-          }
-        }, 100);
-        
+        setIsPlaying(true);
+        // Save state
+        await Storage.save('audioState', { isPlaying: true });
       } catch (e) {
         const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
-        console.log('Stream loading error:', errorMessage);
-        if (errorMessage.includes('autoplay')) {
-          setError('Please tap play again to start streaming (browser autoplay policy)');
-        } else {
-          setError('Could not load stream. Please check your connection and try again.');
-        }
-        setIsPlaying(false);
+        setError('Error starting stream: ' + errorMessage);
       }
       setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    return () => {
-      soundRef.current?.unloadAsync();
-    };
-  }, []);
-
   const handleSpotifySearch = async (song: string) => {
-    const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(song)}`;
     try {
-      await Linking.openURL(spotifyUrl);
-    } catch (e) {
-      const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
-      console.log('Error opening Spotify:', errorMessage);
+      const searchUrl = `https://open.spotify.com/search/${encodeURIComponent(song)}`;
+      await Linking.openURL(searchUrl);
+    } catch (error) {
+      console.log('Error opening Spotify:', error);
     }
   };
 
+  const value = {
+    isPlaying,
+    isLoading,
+    error,
+    currentSong,
+    songHistory,
+    handlePlayPause,
+    handleSpotifySearch
+  };
+
   return (
-    <View style={styles.listenContainer}>
-      {/* Background Image */}
-      <Image 
-        source={require('./assets/sfire.jpg')} 
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      />
-      
-      {/* Content Overlay */}
-      <View style={styles.contentOverlay}>
-        <Text style={styles.description}>Global Burner Radio Network</Text>
-        
-        {/* Responsive Layout Container */}
-        <View
-          style={[
-            styles.responsiveContainer,
-            isLandscape && { flexDirection: 'row', alignItems: 'flex-start', gap: 32 }
-          ]}
+    <AudioContext.Provider value={value}>
+      {children}
+    </AudioContext.Provider>
+  );
+}
+
+// Header Component with Audio Player
+function AppHeader() {
+  const audioContext = React.useContext(AudioContext);
+  
+  if (!audioContext) {
+    return (
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>ShoutingFire</Text>
+      </View>
+    );
+  }
+
+  const { isPlaying, isLoading, currentSong, handlePlayPause, handleSpotifySearch } = audioContext;
+
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerTop}>
+        <Text style={styles.headerTitle}>ShoutingFire</Text>
+        <TouchableOpacity
+          style={styles.headerPlayButton}
+          onPress={handlePlayPause}
+          disabled={isLoading}
         >
-          {/* Left Side - Player Controls */}
-          <View style={styles.playerSection}>
-            {isLoading && <ActivityIndicator size="large" color="#ffd700" />}
-            {error && <Text style={styles.error}>{error}</Text>}
-            <TouchableOpacity
-              style={styles.playButton}
-              onPress={handlePlayPause}
-              disabled={isLoading}
-            >
-              <Text style={styles.playButtonIcon}>
-                {isPlaying ? 'PAUSE' : 'PLAY'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.status}>
-              {isLoading
-                ? 'Buffering...'
-                : isPlaying
-                ? 'Playing live stream'
-                : audioEnabled
-                ? 'Paused'
-                : 'Tap to enable audio'}
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.headerPlayButtonText}>
+              {isPlaying ? '⏸️' : '▶️'}
             </Text>
-            {currentSong && (
-              <Text style={styles.currentSongText}>
-                Now Playing: {currentSong}
-              </Text>
-            )}
-          </View>
-          
-          {/* Right Side - Song History */}
-          <View style={styles.historySection}>
-            <View style={styles.songHistoryContainer}>
-              <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
-                {songHistory.length > 0 ? (
-                  songHistory.map((song, index) => (
-                    <View key={`${song}-${index}`} style={[
-                      styles.songHistoryItem,
-                      index === songHistory.length - 1 && styles.lastSongHistoryItem
-                    ]}>
-                      <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                        <Text style={styles.songHistoryText}>
-                          {song}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => handleSpotifySearch(song)}
-                          style={styles.spotifyButton}
-                        >
-                          <Text style={styles.spotifyButtonText}>Spotify</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.songHistoryItem}>
-                    <Text style={styles.songHistoryText}>No recent songs available</Text>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-          </View>
+          )}
+        </TouchableOpacity>
+      </View>
+      
+      {currentSong && (
+        <View style={styles.headerNowPlaying}>
+          <Text style={styles.headerNowPlayingText} numberOfLines={1}>
+            {currentSong}
+          </Text>
+          <TouchableOpacity
+            style={styles.headerSpotifyButton}
+            onPress={() => handleSpotifySearch(currentSong)}
+          >
+            <Text style={styles.headerSpotifyButtonText}>🎵</Text>
+          </TouchableOpacity>
         </View>
+      )}
+    </View>
+  );
+}
+
+// Storage utility for cross-platform state persistence
+const Storage = {
+  async save(key: string, value: any) {
+    try {
+      await AsyncStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
+      console.log('Error saving to storage:', errorMessage);
+    }
+  },
+  
+  async load(key: string) {
+    try {
+      const value = await AsyncStorage.getItem(key);
+      return value ? JSON.parse(value) : null;
+    } catch (error) {
+      const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
+      console.log('Error loading from storage:', errorMessage);
+      return null;
+    }
+  }
+};
+
+// Audio Player Component (simplified for ListenScreen)
+function ListenScreen() {
+  const audioContext = React.useContext(AudioContext);
+  
+  if (!audioContext) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>Audio context not available</Text>
+      </View>
+    );
+  }
+
+  const { songHistory, handleSpotifySearch } = audioContext;
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Recent Songs</Text>
+      <Text style={styles.description}>Song history from the live stream</Text>
+      
+      <View style={styles.songHistoryContainer}>
+        <ScrollView style={styles.songHistoryScroll} showsVerticalScrollIndicator={false}>
+          {songHistory.length > 0 ? (
+            songHistory.map((song: string, index: number) => (
+              <View key={`${song}-${index}`} style={[
+                styles.songHistoryItem,
+                index === songHistory.length - 1 && styles.lastSongHistoryItem
+              ]}>
+                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                  <Text style={styles.songHistoryText}>
+                    {song}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleSpotifySearch(song)}
+                    style={styles.spotifyButton}
+                  >
+                    <Text style={styles.spotifyButtonText}>Spotify</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.songHistoryItem}>
+              <Text style={styles.songHistoryText}>No recent songs available</Text>
+            </View>
+          )}
+        </ScrollView>
       </View>
     </View>
   );
@@ -523,6 +529,281 @@ function LinksScreen() {
   );
 }
 
+// Regionals Screen Component
+function RegionalsScreen() {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('https://shoutingfire.com/event/feed/');
+      const responseText = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const feed = await rssParser.parse(responseText);
+      setEvents(feed.items || []);
+    } catch (err) {
+      const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
+      console.log('Error fetching events:', errorMessage);
+      setError('Failed to load events. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEventPress = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log('Error opening event link:', error);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Date unavailable';
+    }
+  };
+
+  const stripHtml = (html: string) => {
+    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#ffd700" />
+        <Text style={styles.status}>Loading events...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>{error}</Text>
+        <TouchableOpacity style={styles.playButton} onPress={fetchEvents}>
+          <Text style={styles.playButtonIcon}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.regionalsContainer} contentContainerStyle={styles.regionalsContent}>
+      <Text style={styles.title}>Regional Events</Text>
+      {events.length === 0 ? (
+        <Text style={styles.description}>No events available at the moment.</Text>
+      ) : (
+        events.map((event, index) => (
+          <TouchableOpacity
+            key={event.id || index}
+            style={styles.eventCard}
+            onPress={() => handleEventPress(event.links[0]?.url || '')}
+          >
+            <View style={styles.eventHeader}>
+              <Text style={styles.eventTitle} numberOfLines={2}>
+                {event.title}
+              </Text>
+              <Text style={styles.eventDate}>
+                {formatDate(event.published)}
+              </Text>
+            </View>
+            {event.description && (
+              <Text style={styles.eventDescription} numberOfLines={3}>
+                {stripHtml(event.description)}
+              </Text>
+            )}
+            <View style={styles.eventFooter}>
+              <Text style={styles.eventLink}>Tap to view details →</Text>
+            </View>
+          </TouchableOpacity>
+        ))
+      )}
+    </ScrollView>
+  );
+}
+
+// Now On Air Component
+function NowOnAirScreen() {
+  const [onAirData, setOnAirData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchNowOnAir();
+  }, []);
+
+  const fetchNowOnAir = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('https://shoutingfire.com/');
+      const html = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Use regex to extract the "Now On Air" data from HTML
+      const showData = {
+        title: '',
+        dj: '',
+        time: '',
+        link: '',
+        backgroundImage: ''
+      };
+      
+      // Extract title and link
+      const titleMatch = html.match(/<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
+      if (titleMatch) {
+        showData.link = titleMatch[1];
+        showData.title = decodeHtmlEntities(titleMatch[2]);
+      }
+      
+      // Extract DJ name
+      const djMatch = html.match(/<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/);
+      if (djMatch) {
+        showData.dj = decodeHtmlEntities(djMatch[1].trim());
+      }
+      
+      // Extract time - look for the specific pattern with dripicons
+      const timeMatch = html.match(/<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/);
+      if (timeMatch) {
+        showData.time = decodeHtmlEntities(`${timeMatch[1].trim()} → ${timeMatch[2].trim()}`);
+      } else {
+        // Fallback for different time format
+        const timeMatch2 = html.match(/<p class="qt-small">\s*([^<]+)\s*<\/p>/);
+        if (timeMatch2) {
+          showData.time = decodeHtmlEntities(timeMatch2[1].trim());
+        }
+      }
+      
+      // Extract background image - look for the specific div with data-bgimage
+      const bgMatch = html.match(/data-bgimage="([^"]+)"/);
+      if (bgMatch) {
+        showData.backgroundImage = bgMatch[1];
+      } else {
+        // Fallback for style-based background
+        const bgMatch2 = html.match(/background-image:\s*url\(['"]?([^'"]+)['"]?\)/);
+        if (bgMatch2) {
+          showData.backgroundImage = bgMatch2[1];
+        }
+      }
+      
+      if (showData.title) {
+        setOnAirData(showData);
+      } else {
+        setError('No "Now On Air" data found');
+      }
+    } catch (err) {
+      const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
+      console.log('Error fetching Now On Air data:', errorMessage);
+      setError('Failed to load current show information.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShowPress = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.log('Error opening show link:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#ffd700" />
+        <Text style={styles.status}>Loading current show...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>{error}</Text>
+        <TouchableOpacity style={styles.playButton} onPress={fetchNowOnAir}>
+          <Text style={styles.playButtonIcon}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!onAirData) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.description}>No show information available.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.nowOnAirContainer}>
+      <Text style={styles.title}>Now On Air</Text>
+      
+      <TouchableOpacity
+        style={styles.onAirCard}
+        onPress={() => handleShowPress(onAirData.link)}
+      >
+        {onAirData.backgroundImage && (
+          <Image
+            source={{ uri: onAirData.backgroundImage }}
+            style={styles.onAirBackground}
+            resizeMode="cover"
+          />
+        )}
+        
+        <View style={styles.onAirOverlay}>
+          <View style={styles.onAirContent}>
+            <Text style={styles.onAirTitle} numberOfLines={2}>
+              {onAirData.title}
+            </Text>
+            
+            {onAirData.dj && (
+              <Text style={styles.onAirDJ}>
+                {onAirData.dj}
+              </Text>
+            )}
+            
+            {onAirData.time && (
+              <Text style={styles.onAirTime}>
+                {onAirData.time}
+              </Text>
+            )}
+            
+            <View style={styles.onAirFooter}>
+              <Text style={styles.onAirLink}>Tap to view show details →</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('listen');
 
@@ -552,6 +833,10 @@ export default function App() {
         return <ChatScreen />;
       case 'schedule':
         return <ScheduleScreen />;
+      case 'regionals':
+        return <RegionalsScreen />;
+      case 'nowonair':
+        return <NowOnAirScreen />;
       case 'links':
         return <LinksScreen />;
       default:
@@ -560,55 +845,71 @@ export default function App() {
   };
 
   return (
-    <View style={styles.appContainer}>
-      <StatusBar style="light" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>ShoutingFire</Text>
-      </View>
+    <AudioProvider>
+      <View style={styles.appContainer}>
+        <StatusBar style="light" />
+        
+        {/* Header with Audio Player */}
+        <AppHeader />
 
-      {/* Content */}
-      <View style={styles.content}>
-        {renderTabContent()}
-      </View>
+        {/* Tab Navigation */}
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'listen' && styles.activeTab]}
+            onPress={() => handleTabChange('listen')}
+          >
+            <Text style={[styles.tabText, activeTab === 'listen' && styles.activeTabText]}>
+              Listen
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
+            onPress={() => handleTabChange('chat')}
+          >
+            <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
+              Chat
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'schedule' && styles.activeTab]}
+            onPress={() => handleTabChange('schedule')}
+          >
+            <Text style={[styles.tabText, activeTab === 'schedule' && styles.activeTabText]}>
+              Schedule
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'regionals' && styles.activeTab]}
+            onPress={() => handleTabChange('regionals')}
+          >
+            <Text style={[styles.tabText, activeTab === 'regionals' && styles.activeTabText]}>
+              Regionals
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'nowonair' && styles.activeTab]}
+            onPress={() => handleTabChange('nowonair')}
+          >
+            <Text style={[styles.tabText, activeTab === 'nowonair' && styles.activeTabText]}>
+              On Air
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'links' && styles.activeTab]}
+            onPress={() => handleTabChange('links')}
+          >
+            <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>
+              Links
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Tab Navigation */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'listen' && styles.activeTab]}
-          onPress={() => handleTabChange('listen')}
-        >
-          <Text style={[styles.tabText, activeTab === 'listen' && styles.activeTabText]}>
-            Listen
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
-          onPress={() => handleTabChange('chat')}
-        >
-          <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
-            Chat
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'schedule' && styles.activeTab]}
-          onPress={() => handleTabChange('schedule')}
-        >
-          <Text style={[styles.tabText, activeTab === 'schedule' && styles.activeTabText]}>
-            Schedule
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'links' && styles.activeTab]}
-          onPress={() => handleTabChange('links')}
-        >
-          <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>
-            Links
-          </Text>
-        </TouchableOpacity>
+        {/* Content */}
+        <View style={styles.content}>
+          {renderTabContent()}
+        </View>
       </View>
-    </View>
+    </AudioProvider>
   );
 }
 
@@ -644,8 +945,8 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#000',
-    borderTopWidth: 2,
-    borderTopColor: '#ffd700',
+    borderBottomWidth: 2,
+    borderBottomColor: '#ffd700',
     position: 'relative',
     zIndex: 10,
   },
@@ -850,6 +1151,185 @@ const styles = StyleSheet.create({
     color: '#ffd700',
     marginBottom: 4, // was 8
     textAlign: 'center',
+  },
+  regionalsContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  regionalsContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  eventCard: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ffd700',
+    shadowColor: '#ffd700',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  eventHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  eventTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    flex: 1,
+    marginRight: 12,
+  },
+  eventDate: {
+    fontSize: 12,
+    color: '#ffd700',
+    opacity: 0.8,
+    textAlign: 'right',
+  },
+  eventDescription: {
+    fontSize: 14,
+    color: '#ffd700',
+    lineHeight: 20,
+    marginBottom: 12,
+    opacity: 0.9,
+  },
+  eventFooter: {
+    alignItems: 'flex-end',
+  },
+  eventLink: {
+    fontSize: 12,
+    color: '#ffd700',
+    opacity: 0.7,
+    fontStyle: 'italic',
+  },
+  nowOnAirContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    padding: 20,
+  },
+  onAirCard: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 20,
+    borderWidth: 2,
+    borderColor: '#ffd700',
+    shadowColor: '#ffd700',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  onAirBackground: {
+    width: '100%',
+    height: 300,
+  },
+  onAirOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onAirContent: {
+    padding: 20,
+    alignItems: 'center',
+    width: '100%',
+  },
+  onAirTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 28,
+  },
+  onAirDJ: {
+    fontSize: 18,
+    color: '#ffd700',
+    textAlign: 'center',
+    marginBottom: 8,
+    opacity: 0.9,
+  },
+  onAirTime: {
+    fontSize: 16,
+    color: '#ffd700',
+    textAlign: 'center',
+    marginBottom: 16,
+    opacity: 0.8,
+  },
+  onAirFooter: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  onAirLink: {
+    fontSize: 14,
+    color: '#ffd700',
+    opacity: 0.7,
+    fontStyle: 'italic',
+  },
+  // Header styles
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerPlayButton: {
+    backgroundColor: '#ffd700',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerPlayButtonText: {
+    fontSize: 16,
+    color: '#000',
+    fontWeight: 'bold',
+  },
+  headerNowPlaying: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffd700',
+  },
+  headerNowPlayingText: {
+    fontSize: 12,
+    color: '#ffd700',
+    flex: 1,
+    marginRight: 8,
+  },
+  headerSpotifyButton: {
+    backgroundColor: '#1DB954',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  headerSpotifyButtonText: {
+    fontSize: 12,
+    color: '#fff',
   },
 });
 
