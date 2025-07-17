@@ -987,8 +987,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#2d2d2d',
     borderRadius: 10,
     marginTop: 20,
-    minWidth: 300,
-    maxWidth: 400,
+    width: '100%',
+    maxWidth: 900,
     borderWidth: 1,
     borderColor: '#ffd700',
     padding: 0,
@@ -1219,6 +1219,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
   },
   onAirBackground: {
     width: '100%',
@@ -1322,9 +1325,13 @@ const styles = StyleSheet.create({
   // Listen screen section styles
   nowOnAirSection: {
     marginBottom: 30,
+    width: '100%',
+    maxWidth: 900,
   },
   recentSongsSection: {
     marginBottom: 20,
+    width: '100%',
+    maxWidth: 900,
   },
   sectionTitle: {
     fontSize: 20,
@@ -1334,9 +1341,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scrollContent: {
-    alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
   },
   songHistoryContent: {
     padding: 0,
