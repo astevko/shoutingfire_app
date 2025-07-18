@@ -9,22 +9,18 @@ import { WebView } from 'react-native-webview';
 // @ts-ignore
 import * as rssParser from 'react-native-rss-parser';
 
-// HTML entity decoder function
-const decodeHtmlEntities = (text: string): string => {
-  if (typeof document !== 'undefined') {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = text;
-    return textarea.value;
-  }
-  // Fallback for React Native
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&nbsp;/g, ' ');
-};
+// Import OWASP HTML sanitizer utilities
+import { 
+  decodeHtmlEntities, 
+  sanitizeExternalContent, 
+  safeRegexExtract,
+  extractTextFromHtml 
+} from './utils/htmlSanitizer';
+import { 
+  validateUrl, 
+  safeOpenUrl, 
+  buildSafeSearchUrl 
+} from './utils/urlValidator';
 
 // Audio Player Context
 const AudioContext = React.createContext<any>(null);
@@ -70,13 +66,12 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
         if (response.ok) {
           const html = await response.text();
           
-          // Look for the smartmetadata-live mount point and extract current song
-          const smartMetadataMatch = html.match(/Mount Point \/smartmetadata-live[\s\S]*?Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
+          // Look for the smartmetadata-live mount point and extract current song safely
+          const songInfo = safeRegexExtract(html, /Mount Point \/smartmetadata-live[\s\S]*?Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/, 500);
           
-          if (smartMetadataMatch && smartMetadataMatch[1]) {
-            const songInfo = decodeHtmlEntities(smartMetadataMatch[1].trim());
+          if (songInfo) {
             console.log('Fetched song info:', songInfo);
-            if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
+            if (songInfo !== 'Shouting Fire is Currently Unavailable') {
               // Update current song and add to history if it's different
               setCurrentSong(songInfo);
               setSongHistory(prevHistory => {
@@ -109,42 +104,37 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
               setCurrentSong('Live Radio - Currently Playing');
             }
           } else {
-            // Fallback: try to get any current song info
-            const anySongMatch = html.match(/Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/);
-            if (anySongMatch && anySongMatch[1]) {
-              const songInfo = decodeHtmlEntities(anySongMatch[1].trim());
-              if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable') {
-                // Update current song and add to history if it's different
-                setCurrentSong(songInfo);
-                setSongHistory(prevHistory => {
-                  const splitParts = (s: string) => s.split(' - ').map(p => p.trim());
-                  const newParts = splitParts(songInfo);
-                  const prevParts = prevHistory.length > 0 ? splitParts(prevHistory[0]) : [];
+            // Fallback: try to get any current song info safely
+            const fallbackSongInfo = safeRegexExtract(html, /Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/, 500);
+            if (fallbackSongInfo && fallbackSongInfo !== 'Shouting Fire is Currently Unavailable') {
+              // Update current song and add to history if it's different
+              setCurrentSong(fallbackSongInfo);
+              setSongHistory(prevHistory => {
+                const splitParts = (s: string) => s.split(' - ').map(p => p.trim());
+                const newParts = splitParts(fallbackSongInfo);
+                const prevParts = prevHistory.length > 0 ? splitParts(prevHistory[0]) : [];
 
-                  // If previous is "Artist - Title" and new is "Title - Artist - Album"
-                  if (prevParts.length === 2 && newParts.length === 3) {
-                    const prevArtist = prevParts[0].toLowerCase();
-                    const newArtist = newParts[1].toLowerCase();
-                    if (prevArtist === newArtist) {
-                      // Replace head with enhanced metadata
-                      const updatedHistory = [songInfo, ...prevHistory.slice(1)];
-                      Storage.save('songHistory', updatedHistory.slice(0, 20));
-                      return updatedHistory.slice(0, 20);
-                    }
+                // If previous is "Artist - Title" and new is "Title - Artist - Album"
+                if (prevParts.length === 2 && newParts.length === 3) {
+                  const prevArtist = prevParts[0].toLowerCase();
+                  const newArtist = newParts[1].toLowerCase();
+                  if (prevArtist === newArtist) {
+                    // Replace head with enhanced metadata
+                    const updatedHistory = [fallbackSongInfo, ...prevHistory.slice(1)];
+                    Storage.save('songHistory', updatedHistory.slice(0, 20));
+                    return updatedHistory.slice(0, 20);
                   }
+                }
 
-                  // Fallback: remove duplicates by normalized string
-                  const normalizedSongInfo = songInfo.trim().toLowerCase();
-                  const filteredHistory = prevHistory.filter(
-                    song => song.trim().toLowerCase() !== normalizedSongInfo
-                  );
-                  const newHistory = [songInfo, ...filteredHistory];
-                  Storage.save('songHistory', newHistory.slice(0, 20));
-                  return newHistory.slice(0, 20);
-                });
-              } else {
-                setCurrentSong('Live Radio - Currently Playing');
-              }
+                // Fallback: remove duplicates by normalized string
+                const normalizedSongInfo = fallbackSongInfo.trim().toLowerCase();
+                const filteredHistory = prevHistory.filter(
+                  song => song.trim().toLowerCase() !== normalizedSongInfo
+                );
+                const newHistory = [fallbackSongInfo, ...filteredHistory];
+                Storage.save('songHistory', newHistory.slice(0, 20));
+                return newHistory.slice(0, 20);
+              });
             } else {
               setCurrentSong('Live Radio - Currently Playing');
             }
@@ -223,8 +213,15 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const handleSpotifySearch = async (song: string) => {
     try {
-      const searchUrl = `https://open.spotify.com/search/${encodeURIComponent(song)}`;
-      await Linking.openURL(searchUrl);
+      const searchUrl = buildSafeSearchUrl('https://open.spotify.com/search/', song);
+      if (searchUrl) {
+        const result = await safeOpenUrl(searchUrl, Linking);
+        if (!result.success) {
+          console.warn('Failed to open Spotify:', result.error);
+        }
+      } else {
+        console.warn('Invalid search query for Spotify');
+      }
     } catch (error) {
       console.log('Error opening Spotify:', error);
     }
@@ -356,7 +353,10 @@ function ListenScreen() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      // Use regex to extract the "Now On Air" data from HTML
+      // Sanitize external HTML content
+      const sanitizedHtml = sanitizeExternalContent(html);
+      
+      // Use safe regex extraction for the "Now On Air" data
       const showData = {
         title: '',
         dj: '',
@@ -365,40 +365,51 @@ function ListenScreen() {
         backgroundImage: ''
       };
       
-      // Extract title and link
-      const titleMatch = html.match(/<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
-      if (titleMatch) {
-        showData.link = titleMatch[1];
-        showData.title = decodeHtmlEntities(titleMatch[2]);
+      // Extract title and link safely
+      const titleLink = safeRegexExtract(sanitizedHtml, /<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/, 500);
+      const titleText = safeRegexExtract(sanitizedHtml, /<h1 class="qt-title qt-capfont">\s*<a href="[^"]+"[^>]*>([^<]+)<\/a>/, 200);
+      
+      if (titleLink && titleText) {
+        const urlValidation = validateUrl(titleLink);
+        if (urlValidation.isValid) {
+          showData.link = urlValidation.sanitizedUrl!;
+        }
+        showData.title = titleText;
       }
       
-      // Extract DJ name
-      const djMatch = html.match(/<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/);
-      if (djMatch) {
-        showData.dj = decodeHtmlEntities(djMatch[1].trim());
+      // Extract DJ name safely
+      const djText = safeRegexExtract(sanitizedHtml, /<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/, 100);
+      if (djText) {
+        showData.dj = djText;
       }
       
-      // Extract time - look for the specific pattern with dripicons
-      const timeMatch = html.match(/<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/);
+      // Extract time safely
+      const timeMatch = safeRegexExtract(sanitizedHtml, /<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/, 100);
       if (timeMatch) {
-        showData.time = decodeHtmlEntities(`${timeMatch[1].trim()} → ${timeMatch[2].trim()}`);
+        showData.time = timeMatch;
       } else {
         // Fallback for different time format
-        const timeMatch2 = html.match(/<p class="qt-small">\s*([^<]+)\s*<\/p>/);
-        if (timeMatch2) {
-          showData.time = decodeHtmlEntities(timeMatch2[1].trim());
+        const timeFallback = safeRegexExtract(sanitizedHtml, /<p class="qt-small">\s*([^<]+)\s*<\/p>/, 100);
+        if (timeFallback) {
+          showData.time = timeFallback;
         }
       }
       
-      // Extract background image - look for the specific div with data-bgimage
-      const bgMatch = html.match(/data-bgimage="([^"]+)"/);
-      if (bgMatch) {
-        showData.backgroundImage = bgMatch[1];
+      // Extract background image safely
+      const bgImage = safeRegexExtract(sanitizedHtml, /data-bgimage="([^"]+)"/, 500);
+      if (bgImage) {
+        const urlValidation = validateUrl(bgImage);
+        if (urlValidation.isValid) {
+          showData.backgroundImage = urlValidation.sanitizedUrl!;
+        }
       } else {
         // Fallback for style-based background
-        const bgMatch2 = html.match(/background-image:\s*url\(['"]?([^'"]+)['"]?\)/);
-        if (bgMatch2) {
-          showData.backgroundImage = bgMatch2[1];
+        const bgFallback = safeRegexExtract(sanitizedHtml, /background-image:\s*url\(['"]?([^'"]+)['"]?\)/, 500);
+        if (bgFallback) {
+          const urlValidation = validateUrl(bgFallback);
+          if (urlValidation.isValid) {
+            showData.backgroundImage = urlValidation.sanitizedUrl!;
+          }
         }
       }
       
@@ -418,7 +429,10 @@ function ListenScreen() {
 
   const handleShowPress = async (url: string) => {
     try {
-      await Linking.openURL(url);
+      const result = await safeOpenUrl(url, Linking);
+      if (!result.success) {
+        console.warn('Failed to open show link:', result.error);
+      }
     } catch (error) {
       console.log('Error opening show link:', error);
     }
@@ -659,7 +673,10 @@ function LinksScreen() {
 
   const handleLinkPress = async (url: string) => {
     try {
-      await Linking.openURL(url);
+      const result = await safeOpenUrl(url, Linking);
+      if (!result.success) {
+        console.warn('Failed to open link:', result.error);
+      }
     } catch (e) {
       const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
       console.log('Error opening link:', errorMessage);
@@ -723,7 +740,10 @@ function RegionalsScreen() {
 
   const handleEventPress = async (url: string) => {
     try {
-      await Linking.openURL(url);
+      const result = await safeOpenUrl(url, Linking);
+      if (!result.success) {
+        console.warn('Failed to open event link:', result.error);
+      }
     } catch (error) {
       console.log('Error opening event link:', error);
     }
@@ -743,7 +763,7 @@ function RegionalsScreen() {
   };
 
   const stripHtml = (html: string) => {
-    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    return extractTextFromHtml(html);
   };
 
   if (loading) {
