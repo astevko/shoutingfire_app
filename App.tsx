@@ -21,6 +21,23 @@ import {
   safeOpenUrl, 
   buildSafeSearchUrl 
 } from './utils/urlValidator';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://dc66b01d5a5155b51f413d808d92d32a@o4509691986378752.ingest.us.sentry.io/4509691987689472',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 // Audio Player Context
 const AudioContext = React.createContext<any>(null);
@@ -34,6 +51,7 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
   const [currentSong, setCurrentSong] = useState<string | null>(null);
   const [songHistory, setSongHistory] = useState<string[]>([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [isActuallyPlaying, setIsActuallyPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
   // Load saved state on component mount
@@ -56,22 +74,64 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
     loadSavedState();
   }, []);
 
-  // Fetch current song info
+  // Monitor actual audio playback status
   useEffect(() => {
+    const monitorAudioStatus = async () => {
+      if (soundRef.current) {
+        try {
+          const status = await soundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            const actuallyPlaying = status.isPlaying && !status.isBuffering;
+            setIsActuallyPlaying(actuallyPlaying);
+            
+            // If we think we're playing but audio has stopped, update UI state
+            if (isPlaying && !actuallyPlaying && !isLoading) {
+              console.log('Audio stopped unexpectedly, updating state');
+              setIsPlaying(false);
+              setError('Stream interrupted - tap play to reconnect');
+            }
+          }
+        } catch (e) {
+          console.log('Error monitoring audio status:', e);
+          setIsActuallyPlaying(false);
+        }
+      } else {
+        setIsActuallyPlaying(false);
+      }
+    };
+
+    // Monitor audio status every 3 seconds when we think we're playing
+    if (isPlaying) {
+      const statusInterval = setInterval(monitorAudioStatus, 3000);
+      return () => clearInterval(statusInterval);
+    } else {
+      setIsActuallyPlaying(false);
+    }
+  }, [isPlaying, isLoading]);
+
+  // Fetch current song info only when actually playing
+  useEffect(() => {
+    if (!isActuallyPlaying) {
+      // Don't fetch song info when not actually playing
+      return;
+    }
+
     const fetchCurrentSong = async () => {
       try {
-        // Fetch from Icecast status page instead of stream headers
-        const response = await fetch('https://shoutingfire-ice.streamguys1.com/status.xsl');
+        // Fetch from XSPF playlist file for more reliable metadata
+        const response = await fetch('https://shoutingfire-ice.streamguys1.com/smartmetadata-live.xspf');
         
         if (response.ok) {
-          const html = await response.text();
+          const xmlText = await response.text();
           
-          // Look for the smartmetadata-live mount point and extract current song safely
-          const songInfo = safeRegexExtract(html, /Mount Point \/smartmetadata-live[\s\S]*?Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/, 500);
+          // Extract song title from XSPF XML format
+          const titleMatch = xmlText.match(/<title[^>]*>([^<]+)<\/title>/);
           
-          if (songInfo) {
-            console.log('Fetched song info:', songInfo);
-            if (songInfo !== 'Shouting Fire is Currently Unavailable') {
+          if (titleMatch && titleMatch[1]) {
+            const songInfo = decodeHtmlEntities(titleMatch[1].trim());
+            console.log('Fetched song info from XSPF:', songInfo);
+            
+            if (songInfo && songInfo !== 'Shouting Fire is Currently Unavailable' && songInfo.length > 0) {
               // Update current song and add to history if it's different
               setCurrentSong(songInfo);
               setSongHistory(prevHistory => {
@@ -104,57 +164,25 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
               setCurrentSong('Live Radio - Currently Playing');
             }
           } else {
-            // Fallback: try to get any current song info safely
-            const fallbackSongInfo = safeRegexExtract(html, /Current Song:<\/td>\s*<td class="streamdata">([^<]+)<\/td>/, 500);
-            if (fallbackSongInfo && fallbackSongInfo !== 'Shouting Fire is Currently Unavailable') {
-              // Update current song and add to history if it's different
-              setCurrentSong(fallbackSongInfo);
-              setSongHistory(prevHistory => {
-                const splitParts = (s: string) => s.split(' - ').map(p => p.trim());
-                const newParts = splitParts(fallbackSongInfo);
-                const prevParts = prevHistory.length > 0 ? splitParts(prevHistory[0]) : [];
-
-                // If previous is "Artist - Title" and new is "Title - Artist - Album"
-                if (prevParts.length === 2 && newParts.length === 3) {
-                  const prevArtist = prevParts[0].toLowerCase();
-                  const newArtist = newParts[1].toLowerCase();
-                  if (prevArtist === newArtist) {
-                    // Replace head with enhanced metadata
-                    const updatedHistory = [fallbackSongInfo, ...prevHistory.slice(1)];
-                    Storage.save('songHistory', updatedHistory.slice(0, 20));
-                    return updatedHistory.slice(0, 20);
-                  }
-                }
-
-                // Fallback: remove duplicates by normalized string
-                const normalizedSongInfo = fallbackSongInfo.trim().toLowerCase();
-                const filteredHistory = prevHistory.filter(
-                  song => song.trim().toLowerCase() !== normalizedSongInfo
-                );
-                const newHistory = [fallbackSongInfo, ...filteredHistory];
-                Storage.save('songHistory', newHistory.slice(0, 20));
-                return newHistory.slice(0, 20);
-              });
-            } else {
-              setCurrentSong('Live Radio - Currently Playing');
-            }
+            setCurrentSong('Live Radio - Currently Playing');
           }
         } else {
           setCurrentSong('Live Radio - Currently Playing');
         }
       } catch (e) {
         const errorMessage = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
-        console.log('Error fetching song info:', errorMessage);
+        console.log('Error fetching song info from XSPF:', errorMessage);
         setCurrentSong('Live Radio - Currently Playing');
       }
     };
 
+    // Fetch immediately when starting to play
     fetchCurrentSong();
     
-    // Update song info every 30 seconds
+    // Update song info every 30 seconds while actually playing
     const interval = setInterval(fetchCurrentSong, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isActuallyPlaying]); // Depend on actual playback state
 
   const handlePlayPause = async () => {
     setError(null);
@@ -166,6 +194,7 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
     
     if (isPlaying) {
       setIsPlaying(false);
+      setIsActuallyPlaying(false);
       setIsLoading(true);
       try {
         await soundRef.current?.stopAsync();
@@ -199,8 +228,17 @@ function AudioProvider({ children }: { children: React.ReactNode }) {
           { shouldPlay: true, isLooping: false }
         );
 
+        // Set up status callback to track actual playback state
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded) {
+            const actuallyPlaying = status.isPlaying && !status.isBuffering;
+            setIsActuallyPlaying(actuallyPlaying);
+          }
+        });
+
         soundRef.current = sound;
         setIsPlaying(true);
+        setIsActuallyPlaying(true); // Assume it starts playing, monitoring will verify
         // Save state
         await Storage.save('audioState', { isPlaying: true });
       } catch (e) {
@@ -353,60 +391,89 @@ function ListenScreen() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      // Sanitize external HTML content
-      const sanitizedHtml = sanitizeExternalContent(html);
+      // Fallback: look for any qt-qtonairhero section (might be "Upcoming")
+      let  onAirSection = html.match(/<div[^>]*qt-qtonairhero[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
       
-      // Use safe regex extraction for the "Now On Air" data
+      if (!onAirSection) {
+        setError('No show information section found');
+        return;
+      }
+      
+      const sectionHtml = onAirSection[0];
+      console.log('Found show section:', sectionHtml.substring(0, 200) + '...');
+      
+      // Initialize data structure
       const showData = {
         title: '',
-        dj: '',
+        subtitle: '',
         time: '',
         link: '',
-        backgroundImage: ''
+        backgroundImage: '',
+        status: 'upcoming' // default
       };
       
-      // Extract title and link safely
-      const titleLink = safeRegexExtract(sanitizedHtml, /<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/, 500);
-      const titleText = safeRegexExtract(sanitizedHtml, /<h1 class="qt-title qt-capfont">\s*<a href="[^"]+"[^>]*>([^<]+)<\/a>/, 200);
+      // Check if this is "Now On Air" or "Upcoming"
+      const statusMatch = sectionHtml.match(/<h5[^>]*>[\s\S]*?<span>\s*(Now On Air|Upcoming)\s*<\/span>/i);
+      if (statusMatch && statusMatch[1]) {
+        showData.status = statusMatch[1].toLowerCase().includes('now') ? 'now' : 'upcoming';
+      }
       
-      if (titleLink && titleText) {
-        const urlValidation = validateUrl(titleLink);
+      // Extract title and link from <h1> tag within this section
+      const titleMatch = sectionHtml.match(/<h1 class="qt-title qt-capfont">\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/);
+      if (titleMatch && titleMatch[1] && titleMatch[2]) {
+        const urlValidation = validateUrl(titleMatch[1]);
         if (urlValidation.isValid) {
           showData.link = urlValidation.sanitizedUrl!;
         }
-        showData.title = titleText;
+        // Properly decode HTML entities in the title
+        showData.title = titleMatch[2]
+          .replace(/&#(\d+);/g, (match: string, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#039;/g, "'")
+          .replace(/&nbsp;/g, ' ');
       }
       
-      // Extract DJ name safely
-      const djText = safeRegexExtract(sanitizedHtml, /<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/, 100);
-      if (djText) {
-        showData.dj = djText;
+      // Extract subtitle from first <h4> tag within this section
+      const subtitleMatch = sectionHtml.match(/<h4 class="qt-capfont">\s*([^<]+)\s*<\/h4>/);
+      if (subtitleMatch && subtitleMatch[1]) {
+        showData.subtitle = subtitleMatch[1]
+          .replace(/&#(\d+);/g, (match: string, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#039;/g, "'")
+          .replace(/&nbsp;/g, ' ')
+          .trim();
       }
       
-      // Extract time safely
-      const timeMatch = safeRegexExtract(sanitizedHtml, /<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/, 100);
-      if (timeMatch) {
-        showData.time = timeMatch;
+      // Extract time from <p> tag within this section
+      const timeMatch = sectionHtml.match(/<p class="qt-small">\s*([^<]+?)\s*<i class="dripicons-arrow-thin-right"><\/i>\s*([^<]+?)\s*<\/p>/);
+      if (timeMatch && timeMatch[1] && timeMatch[2]) {
+        showData.time = `${timeMatch[1].trim()} → ${timeMatch[2].trim()}`;
       } else {
         // Fallback for different time format
-        const timeFallback = safeRegexExtract(sanitizedHtml, /<p class="qt-small">\s*([^<]+)\s*<\/p>/, 100);
-        if (timeFallback) {
-          showData.time = timeFallback;
+        const timeFallback = sectionHtml.match(/<p class="qt-small">\s*([^<]+)\s*<\/p>/);
+        if (timeFallback && timeFallback[1]) {
+          showData.time = timeFallback[1].trim();
         }
       }
       
-      // Extract background image safely
-      const bgImage = safeRegexExtract(sanitizedHtml, /data-bgimage="([^"]+)"/, 500);
-      if (bgImage) {
-        const urlValidation = validateUrl(bgImage);
+      // Extract background image from data-bgimage within this section
+      const bgMatch = sectionHtml.match(/data-bgimage="([^"]+)"/);
+      if (bgMatch && bgMatch[1]) {
+        const urlValidation = validateUrl(bgMatch[1]);
         if (urlValidation.isValid) {
           showData.backgroundImage = urlValidation.sanitizedUrl!;
         }
       } else {
-        // Fallback for style-based background
-        const bgFallback = safeRegexExtract(sanitizedHtml, /background-image:\s*url\(['"]?([^'"]+)['"]?\)/, 500);
-        if (bgFallback) {
-          const urlValidation = validateUrl(bgFallback);
+        // Fallback for CSS background-image
+        const bgFallback = sectionHtml.match(/background-image:\s*url\(['""]?([^'""]+)['""]?\)/);
+        if (bgFallback && bgFallback[1]) {
+          const urlValidation = validateUrl(bgFallback[1]);
           if (urlValidation.isValid) {
             showData.backgroundImage = urlValidation.sanitizedUrl!;
           }
@@ -414,9 +481,18 @@ function ListenScreen() {
       }
       
       if (showData.title) {
-        setOnAirData(showData);
+        // Add status information to the displayed data
+        const displayData = {
+          ...showData,
+          dj: showData.subtitle // Use subtitle as DJ name for compatibility
+        };
+        setOnAirData(displayData);
+        
+        if (showData.status === 'upcoming') {
+          console.log('Note: Showing upcoming show as no current "Now On Air" show found');
+        }
       } else {
-        setError('No "Now On Air" data found');
+        setError('No show information found');
       }
     } catch (err) {
       const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
@@ -446,7 +522,9 @@ function ListenScreen() {
     >
       {/* Now On Air Section */}
       <View style={styles.nowOnAirSection}>
-        <Text style={styles.sectionTitle}>Now On Air</Text>
+        <Text style={styles.sectionTitle}>
+          {onAirData && onAirData.status === 'upcoming' ? 'Upcoming Show' : 'Now On Air'}
+        </Text>
         
         {loading ? (
           <View style={styles.onAirCard}>
@@ -824,7 +902,7 @@ function RegionalsScreen() {
 // Now On Air Component
 
 
-export default function App() {
+export default Sentry.wrap(function App() {
   const [activeTab, setActiveTab] = useState('listen');
 
   // Load saved tab state on app start
@@ -922,7 +1000,7 @@ export default function App() {
       </View>
     </AudioProvider>
   );
-}
+});
 
 const styles = StyleSheet.create({
   appContainer: {
@@ -1371,5 +1449,3 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 });
-
-

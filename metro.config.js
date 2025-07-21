@@ -1,6 +1,10 @@
 const { getDefaultConfig } = require('@expo/metro-config');
 
-const config = getDefaultConfig(__dirname);
+const {
+  getSentryExpoConfig
+} = require("@sentry/react-native/metro");
+
+const config = getSentryExpoConfig(__dirname);
 
 // Reduce max workers to minimize file watchers
 config.maxWorkers = 1;
@@ -19,4 +23,4 @@ config.resolver.alias = {
   buffer: 'buffer',
 };
 
-module.exports = config; 
+module.exports = config;

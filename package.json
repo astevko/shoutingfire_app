@@ -25,6 +25,7 @@
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
+    "@sentry/react-native": "^6.17.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "expo": "~50.0.0",

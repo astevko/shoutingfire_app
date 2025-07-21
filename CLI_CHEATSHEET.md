@@ -17,9 +17,10 @@ expo start --android
 expo start --web
 ```
 
+### Expo CLI
+
 ## 📱 Development Commands
 
-### Expo CLI
 ```bash
 # Start Expo development server
 expo start
@@ -43,10 +44,11 @@ expo start --web
 ```
 
 ### React Native CLI
+
 ```bash
 # Run on iOS simulator
 npx react-native run-ios
-
+start
 # Run on Android emulator
 npx react-native run-android
 
@@ -61,6 +63,7 @@ npx react-native clean
 ## 🏗️ Building Commands
 
 ### Expo Build
+
 ```bash
 # Build for iOS
 eas build --platform ios
@@ -81,6 +84,7 @@ eas build --platform android --profile development
 ```
 
 ### Local Builds
+
 ```bash
 # Build for web
 expo build:web
@@ -95,6 +99,7 @@ expo build:android
 ## 📦 Publishing & Deployment
 
 ### Expo Publish
+
 ```bash
 # Publish to Expo
 expo publish
@@ -109,6 +114,7 @@ expo publish:set --publish-id <publish-id>
 ```
 
 ### EAS Submit
+
 ```bash
 # Submit to App Store
 eas submit --platform ios
@@ -123,6 +129,7 @@ eas submit --platform all
 ## 🔧 Development Tools
 
 ### Metro Bundler
+
 ```bash
 # Start Metro bundler
 npx react-native start
@@ -135,6 +142,7 @@ npx react-native start --port 8081
 ```
 
 ### Debugging
+
 ```bash
 # Open React Native Debugger
 npx react-native log-ios
@@ -145,6 +153,7 @@ npx react-native log-android
 ```
 
 ### Testing
+
 ```bash
 # Run tests
 npm test
@@ -159,6 +168,7 @@ npm test -- --testPathPattern=App.test.tsx
 ## 📱 Device Management
 
 ### iOS Simulator
+
 ```bash
 # List available simulators
 xcrun simctl list devices
@@ -172,6 +182,7 @@ xcrun simctl erase all
 ```
 
 ### Android Emulator
+
 ```bash
 # List available emulators
 emulator -list-avds
@@ -186,6 +197,7 @@ emulator -avd "Pixel_4_API_30" -no-snapshot-load
 ## 🛠️ Utility Commands
 
 ### Package Management
+
 ```bash
 # Install new package
 npm install package-name
@@ -201,6 +213,7 @@ npm install
 ```
 
 ### Git Integration
+
 ```bash
 # Check status
 git status
@@ -220,6 +233,7 @@ git checkout -b feature/song-history-improvements
 ```
 
 ### Environment Management
+
 ```bash
 # Set environment variables
 export EXPO_PUBLIC_API_URL=https://api.example.com
@@ -234,6 +248,7 @@ echo $NODE_ENV
 ## 🔍 Troubleshooting
 
 ### Common Issues
+
 ```bash
 # Clear all caches
 expo start --clear
@@ -255,6 +270,7 @@ npm install -g @expo/cli@latest
 ```
 
 ### Platform-Specific
+
 ```bash
 # iOS - Clean build folder
 cd ios && xcodebuild clean && cd ..
@@ -269,6 +285,7 @@ cd android && ./gradlew clean && cd ..
 ## 📋 Project-Specific Commands
 
 ### ShoutingFire App
+
 ```bash
 # Start the app
 npm start
@@ -284,6 +301,7 @@ cat BUILD_STATUS.md
 ```
 
 ### Scripts (from package.json)
+
 ```bash
 # Run custom scripts
 npm run android
@@ -297,6 +315,7 @@ npm run lint
 ## 🎯 EAS (Expo Application Services)
 
 ### Configuration
+
 ```bash
 # Initialize EAS
 eas init
@@ -309,6 +328,7 @@ npm install -g @expo/eas-cli@latest
 ```
 
 ### Build Management
+
 ```bash
 # List builds
 eas build:list
@@ -348,4 +368,4 @@ expo start --clear
 ---
 
 *Last updated: $(date)*
-*Project: ShoutingFire App* 
+*Project: ShoutingFire App*

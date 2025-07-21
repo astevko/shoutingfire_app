@@ -6,7 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -18,7 +22,9 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "This app needs microphone access for chat functionality",
         "NSCameraUsageDescription": "This app needs camera access for chat functionality"
       }
@@ -28,7 +34,15 @@
       "bundler": "webpack"
     },
     "plugins": [
-      "expo-av"
+      "expo-av",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "javascript-react",
+          "organization": "stevko-cyber-services"
+        }
+      ]
     ],
     "extra": {
       "eas": {
