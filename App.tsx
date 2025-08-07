@@ -361,6 +361,9 @@ function ListenScreen() {
   const [onAirData, setOnAirData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataRetrievedAt, setDataRetrievedAt] = useState<Date | null>(null);
+  const [parsedTimes, setParsedTimes] = useState<{startTime: Date | null, endTime: Date | null}>({startTime: null, endTime: null});
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   if (!audioContext) {
     return (
@@ -374,15 +377,134 @@ function ListenScreen() {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
+  // Parse time string like "7:00 PM → 9:00 PM" into Date objects
+  const parseShowTimes = (timeString: string, retrievedAt: Date) => {
+    try {
+      // Handle format like "7:00 PM → 9:00 PM"
+      const timeMatch = timeString.match(/^(.+?)\s*→\s*(.+?)$/);
+      if (timeMatch && timeMatch[1] && timeMatch[2]) {
+        const startTimeStr = timeMatch[1].trim();
+        const endTimeStr = timeMatch[2].trim();
+        
+        // Parse times for today first
+        const today = new Date(retrievedAt);
+        const startTime = parseTimeToDate(startTimeStr, today);
+        const endTime = parseTimeToDate(endTimeStr, today);
+        
+        // If end time is before start time, it's likely tomorrow
+        if (endTime && startTime && endTime < startTime) {
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const endTimeTomorrow = parseTimeToDate(endTimeStr, tomorrow);
+          return { startTime, endTime: endTimeTomorrow };
+        }
+        
+        return { startTime, endTime };
+      }
+      
+      // Handle single time format
+      const singleTime = parseTimeToDate(timeString, new Date(retrievedAt));
+      return { startTime: singleTime, endTime: null };
+    } catch (error) {
+      console.log('Error parsing show times:', error);
+      return { startTime: null, endTime: null };
+    }
+  };
+
+  // Parse time string like "7:00 PM" to Date object for given date
+  const parseTimeToDate = (timeStr: string, baseDate: Date): Date | null => {
+    try {
+      // Handle formats like "7:00 PM", "7:00PM", "7PM", etc.
+      const timeRegex = /^(\d{1,2}):?(\d{0,2})\s*(AM|PM)?$/i;
+      const match = timeStr.trim().match(timeRegex);
+      
+      if (!match) return null;
+      
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2] ? parseInt(match[2], 10) : 0;
+      const period = match[3]?.toUpperCase();
+      
+      // Convert to 24-hour format
+      if (period === 'PM' && hours !== 12) {
+        hours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+      
+      const date = new Date(baseDate);
+      date.setHours(hours, minutes, 0, 0);
+      
+      return date;
+    } catch (error) {
+      console.log('Error parsing time:', timeStr, error);
+      return null;
+    }
+  };
+
+  // Set up refresh timer based on show timing
+  const setupRefreshTimer = (retrievedAt: Date, startTime: Date | null, endTime: Date | null) => {
+    // Clear existing timer
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+
+    const now = new Date();
+    let refreshTime: Date | null = null;
+
+    // If start time is in the future (Upcoming show)
+    if (startTime && startTime > now) {
+      refreshTime = new Date(startTime.getTime() + 3 * 60 * 1000); // 3 minutes after start
+      console.log('Setting refresh timer for 3 minutes after start time:', refreshTime);
+    }
+    // If end time is in the future (Current show)
+    else if (endTime && endTime > now) {
+      refreshTime = new Date(endTime.getTime() + 3 * 60 * 1000); // 3 minutes after end
+      console.log('Setting refresh timer for 3 minutes after end time:', refreshTime);
+    }
+    // Neither are in the future - refresh at 5 minutes after the hour
+    else {
+      const nextHour = new Date(now);
+      nextHour.setHours(nextHour.getHours() + 1, 5, 0, 0); // 5 minutes after next hour
+      refreshTime = nextHour;
+      console.log('Setting refresh timer for 5 minutes after next hour:', refreshTime);
+    }
+
+    if (refreshTime) {
+      const delay = refreshTime.getTime() - now.getTime();
+      if (delay > 0) {
+        refreshTimerRef.current = setTimeout(() => {
+          console.log('Auto-refreshing show data...');
+          fetchNowOnAir();
+        }, delay);
+      }
+    }
+  };
+
   // Fetch Now On Air data
   useEffect(() => {
     fetchNowOnAir();
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
   }, []);
 
   const fetchNowOnAir = async () => {
     try {
+      // Clear any existing timer before fetching new data
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      
       setLoading(true);
       setError(null);
+      
+      const retrievedAt = new Date(); // Track when data is retrieved
       
       const response = await fetch('https://shoutingfire.com/');
       const html = await response.text();
@@ -487,6 +609,21 @@ function ListenScreen() {
           dj: showData.subtitle // Use subtitle as DJ name for compatibility
         };
         setOnAirData(displayData);
+        setDataRetrievedAt(retrievedAt);
+        
+        // Parse show times and set up refresh timer
+        if (showData.time) {
+          const times = parseShowTimes(showData.time, retrievedAt);
+          setParsedTimes(times);
+          setupRefreshTimer(retrievedAt, times.startTime, times.endTime);
+          
+          console.log('Show times parsed:', {
+            timeString: showData.time,
+            startTime: times.startTime,
+            endTime: times.endTime,
+            status: showData.status
+          });
+        }
         
         if (showData.status === 'upcoming') {
           console.log('Note: Showing upcoming show as no current "Now On Air" show found');
@@ -498,6 +635,19 @@ function ListenScreen() {
       const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
       console.log('Error fetching Now On Air data:', errorMessage);
       setError('Failed to load current show information.');
+      
+      // Clear timer on error and set up a retry timer for 5 minutes
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      
+      // Set up retry timer for 5 minutes on error
+      refreshTimerRef.current = setTimeout(() => {
+        console.log('Retrying after error...');
+        fetchNowOnAir();
+      }, 5 * 60 * 1000);
+      
     } finally {
       setLoading(false);
     }
